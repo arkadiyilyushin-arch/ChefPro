@@ -1,0 +1,1054 @@
+import SwiftUI
+import UserNotifications
+import CoreSpotlight
+import WidgetKit
+
+// MARK: - Store
+
+final class ChefProStore: ObservableObject {
+    @Published var dishes: [Dish] = [] { didSet { saveData() } }
+    @Published var inventoryItems: [InventoryItem] = [] { didSet { saveData() } }
+    @Published var deliveries: [Delivery] = [] { didSet { saveData() } }
+    @Published var writeOffs: [WriteOff] = [] { didSet { saveData() } }
+    @Published var productions: [Production] = [] { didSet { saveData() } }
+    @Published var employees: [Employee] = [] { didSet { saveData() } }
+    @Published var currentEmployeeID: UUID? = nil { didSet { saveData() } }
+    @Published var kitchenOrders: [KitchenOrder] = [] { didSet { saveData() } }
+
+    @Published var profile: UserProfile = UserProfile(
+        name: "Иван Петров",
+        position: "Шеф-повар",
+        phone: "+47 000 00 000",
+        permissions: ["Техкарты", "Склад", "Приемка", "Списания", "Отчеты", "Настройки"]
+    ) { didSet { saveData() } }
+
+    @Published var restaurantName: String = "Demo Restaurant" { didSet { saveData() } }
+    @Published var appColorScheme: AppColorScheme = .system       { didSet { saveData() } }
+    @Published var notificationsEnabled: Bool = false             { didSet { saveData() } }
+    @Published var suppliers: [Supplier] = []                     { didSet { saveData() } }
+    @Published var currentShift: Shift? = nil                     { didSet { saveData() } }
+    @Published var shiftHistory: [Shift] = []                     { didSet { saveData() } }
+    @Published var closedKitchenOrders: [KitchenOrder] = []       { didSet { saveData() } }
+    @Published var sales: [Sale] = []                              { didSet { saveData() } }
+    @Published var foodCostThreshold: Double = 35                   { didSet { saveData() } }
+    @Published var currentProductionPlan: [PlanItem] = []           { didSet { saveData() } }
+    @Published var purchaseBudget: Double = 0                       { didSet { saveData() } }
+    @Published var expiryWarningDays: Int = 3                       { didSet { saveData() } }
+    @Published var dailyDigestEnabled: Bool = false                 { didSet { saveData(); scheduleDailyDigest() } }
+    @Published var haccpRemindersEnabled: Bool = false              { didSet { saveData(); scheduleHACCPReminders() } }
+    @Published var haccpIntervalHours: Int = 4                      { didSet { saveData(); scheduleHACCPReminders() } }
+    @Published var hasSeenOnboarding: Bool = false                  { didSet { saveData() } }
+    @Published var checklists: [ChecklistItem] = []      { didSet { saveData() } }
+    @Published var menuCollections: [MenuCollection] = [] { didSet { saveData() } }
+    @Published var workSchedule: [WorkShift] = []         { didSet { saveData() } }
+    @Published var temperatureLogs: [TemperatureLog] = [] { didSet { saveData() } }
+    @Published var recipeVersions: [RecipeVersion] = []   { didSet { saveData() } }
+    @Published var appLanguage: AppLanguage = .russian    { didSet { saveData() } }
+
+    @Published var isSyncing = false
+    @Published var lastSyncDate: Date? = nil
+    @Published var syncError: String? = nil
+
+    private let dishesKey = "chefpro_dishes_v2"
+    private let inventoryKey = "chefpro_inventory_v2"
+    private let deliveriesKey = "chefpro_deliveries_v2"
+    private let writeOffsKey = "chefpro_writeoffs_v2"
+    private let productionsKey = "chefpro_productions_v1"
+    private let profileKey = "chefpro_profile_v2"
+    private let employeesKey = "chefpro_employees_v2"
+    private let currentEmployeeIDKey = "chefpro_current_employee_id_v2"
+    private let lastSyncKey = "chefpro_last_sync_date"
+    private let kitchenOrdersKey        = "chefpro_kitchen_orders_v1"
+    private let closedKitchenOrdersKey  = "chefpro_closed_orders_v1"
+    private let restaurantNameKey       = "chefpro_restaurant_name_v1"
+    private let appColorSchemeKey       = "chefpro_color_scheme_v1"
+    private let notificationsEnabledKey = "chefpro_notifications_v1"
+    private let suppliersKey            = "chefpro_suppliers_v1"
+    private let currentShiftKey         = "chefpro_current_shift_v1"
+    private let shiftHistoryKey         = "chefpro_shift_history_v1"
+    private let salesKey                = "chefpro_sales_v1"
+    private let foodCostThresholdKey    = "chefpro_fc_threshold_v1"
+    private let productionPlanKey       = "chefpro_plan_v1"
+    private let purchaseBudgetKey       = "chefpro_purchase_budget_v1"
+    private let expiryWarningDaysKey    = "chefpro_expiry_warning_days_v1"
+    private let dailyDigestKey          = "chefpro_daily_digest_v1"
+    private let haccpRemindersKey       = "chefpro_haccp_reminders_v1"
+    private let haccpIntervalHoursKey   = "chefpro_haccp_interval_v1"
+    private let hasSeenOnboardingKey    = "chefpro_onboarding_v1"
+    private let checklistsKey       = "chefpro_checklists_v1"
+    private let collectionsKey      = "chefpro_collections_v1"
+    private let workScheduleKey       = "chefpro_work_schedule_v1"
+    private let temperatureLogsKey    = "chefpro_temp_logs_v1"
+    private let appLanguageKey        = "chefpro_app_language_v1"
+    private let recipeVersionsKey     = "chefpro_recipe_versions_v1"
+
+    // Prevents upload from triggering when we are writing downloaded data to properties
+    private var isSyncingFromCloud = false
+    private var uploadTask: Task<Void, Never>?
+
+    init() {
+        loadData()
+        if employees.isEmpty { loadDemoEmployees() }
+        if dishes.isEmpty && inventoryItems.isEmpty { loadDemoData() }
+        lastSyncDate = UserDefaults.standard.object(forKey: lastSyncKey) as? Date
+        if checklists.isEmpty { loadDefaultChecklists() }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        Task { await syncFromCloud() }
+    }
+
+    var isLoggedIn: Bool {
+        currentEmployee != nil
+    }
+
+    var currentEmployee: Employee? {
+        guard let currentEmployeeID else { return nil }
+        return employees.first { $0.id == currentEmployeeID }
+    }
+
+    var totalDeliverySum: Double {
+        deliveries.reduce(0) { $0 + $1.price }
+    }
+
+    var lowStockItems: [InventoryItem] {
+        inventoryItems.filter { $0.isLowStock }
+    }
+
+    var expiringItems: [InventoryItem] {
+        inventoryItems.filter { $0.isExpired || $0.isExpiringSoon }.sorted {
+            ($0.expiryDate ?? .distantFuture) < ($1.expiryDate ?? .distantFuture)
+        }
+    }
+
+    var purchaseList: [InventoryItem] {
+        inventoryItems.filter { $0.isLowStock }.sorted { $0.name < $1.name }
+    }
+
+    var dishCategories: [String] {
+        Array(Set(dishes.map { $0.category })).sorted()
+    }
+
+    var inventoryCategories: [String] {
+        Array(Set(inventoryItems.map { $0.category })).sorted()
+    }
+
+    func hasPermission(_ permission: String) -> Bool {
+        profile.permissions.contains(permission)
+    }
+
+    func login(employee: Employee, pin: String) -> Bool {
+        guard employees.contains(where: { $0.id == employee.id }),
+              employee.pin == pin else { return false }
+        currentEmployeeID = employee.id
+        profile = UserProfile(
+            name: employee.name,
+            position: employee.position,
+            phone: employee.phone,
+            permissions: employee.permissions
+        )
+        return true
+    }
+
+    func logout() {
+        currentEmployeeID = nil
+    }
+
+    func addEmployee(_ employee: Employee) {
+        employees.append(employee)
+    }
+
+    func updateEmployee(_ employee: Employee) {
+        guard let index = employees.firstIndex(where: { $0.id == employee.id }) else { return }
+        employees[index] = employee
+        if currentEmployeeID == employee.id {
+            profile = UserProfile(
+                name: employee.name,
+                position: employee.position,
+                phone: employee.phone,
+                permissions: employee.permissions
+            )
+        }
+    }
+
+    func deleteEmployee(_ employee: Employee) {
+        employees.removeAll { $0.id == employee.id }
+        if currentEmployeeID == employee.id { logout() }
+    }
+
+    // MARK: Kitchen Orders
+    func addKitchenOrder(_ order: KitchenOrder) {
+        kitchenOrders.append(order)
+    }
+
+    func advanceOrderStatus(_ order: KitchenOrder) {
+        guard let idx = kitchenOrders.firstIndex(where: { $0.id == order.id }),
+              let next = kitchenOrders[idx].status.next else { return }
+        kitchenOrders[idx].status = next
+        switch next {
+        case .cooking: kitchenOrders[idx].cookingStartedAt = Date()
+        case .ready:   kitchenOrders[idx].readyAt = Date()
+        default: break
+        }
+    }
+
+    func deleteKitchenOrder(_ order: KitchenOrder) {
+        kitchenOrders.removeAll { $0.id == order.id }
+    }
+
+    func inventoryItem(forBarcode code: String) -> InventoryItem? {
+        guard !code.isEmpty else { return nil }
+        return inventoryItems.first { $0.barcode == code }
+    }
+
+    func archiveKitchenOrder(_ order: KitchenOrder) {
+        kitchenOrders.removeAll { $0.id == order.id }
+        closedKitchenOrders.insert(order, at: 0)
+        if closedKitchenOrders.count > 100 {
+            closedKitchenOrders = Array(closedKitchenOrders.prefix(100))
+        }
+    }
+
+    // MARK: Shift
+    func openShift() {
+        currentShift = Shift(openedAt: Date(), openedBy: profile.name)
+    }
+
+    func closeShift() {
+        guard var shift = currentShift else { return }
+        shift.closedAt = Date()
+        let since = shift.openedAt
+        shift.productionsCount    = productions.filter { $0.date >= since }.count
+        shift.writeOffsCount      = writeOffs.filter { $0.date >= since }.count
+        shift.deliveriesCount     = deliveries.filter { $0.date >= since }.count
+        shift.totalProductionCost = productions.filter { $0.date >= since }.reduce(0) { $0 + $1.totalCost }
+        shift.totalDeliveryCost   = deliveries.filter { $0.date >= since }.reduce(0) { $0 + $1.price }
+        shiftHistory.insert(shift, at: 0)
+        currentShift = nil
+    }
+
+    // MARK: Photo Storage
+    func saveDishPhoto(_ image: UIImage, for dish: Dish) {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        let filename = "dish_\(dish.id.uuidString).jpg"
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        try? data.write(to: url, options: .atomic)
+        if let idx = dishes.firstIndex(where: { $0.id == dish.id }) {
+            dishes[idx].photoFilename = filename
+        }
+    }
+
+    func loadDishPhoto(for dish: Dish) -> UIImage? {
+        guard let filename = dish.photoFilename else { return nil }
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        return UIImage(contentsOfFile: url.path)
+    }
+
+    func deleteDishPhoto(for dish: Dish) {
+        guard let filename = dish.photoFilename else { return }
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: url)
+        if let idx = dishes.firstIndex(where: { $0.id == dish.id }) {
+            dishes[idx].photoFilename = nil
+        }
+    }
+
+    // MARK: Step Photo Storage
+    func saveStepPhoto(_ image: UIImage, for step: CookingStep, in dish: Dish) {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        let filename = "step_\(step.id.uuidString).jpg"
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        try? data.write(to: url, options: .atomic)
+        if let di = dishes.firstIndex(where: { $0.id == dish.id }),
+           let si = dishes[di].steps.firstIndex(where: { $0.id == step.id }) {
+            dishes[di].steps[si].photoFilename = filename
+        }
+    }
+
+    func loadStepPhoto(for step: CookingStep) -> UIImage? {
+        guard let filename = step.photoFilename else { return nil }
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        return UIImage(contentsOfFile: url.path)
+    }
+
+    func deleteStepPhoto(for step: CookingStep, in dish: Dish) {
+        guard let filename = step.photoFilename else { return }
+        let url = FileManager.default.documentsURL.appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: url)
+        if let di = dishes.firstIndex(where: { $0.id == dish.id }),
+           let si = dishes[di].steps.firstIndex(where: { $0.id == step.id }) {
+            dishes[di].steps[si].photoFilename = nil
+        }
+    }
+
+    // MARK: Checklist CRUD
+    func addChecklist(_ item: ChecklistItem) { checklists.append(item) }
+    func updateChecklist(_ item: ChecklistItem) {
+        if let i = checklists.firstIndex(where: { $0.id == item.id }) { checklists[i] = item }
+    }
+    func deleteChecklist(_ item: ChecklistItem) { checklists.removeAll { $0.id == item.id } }
+    func resetChecklists(for type: ChecklistType) {
+        for i in checklists.indices where checklists[i].type == type {
+            checklists[i].isCompleted = false
+            checklists[i].completedBy = ""
+            checklists[i].completedAt = nil
+        }
+    }
+    func completeChecklist(_ item: ChecklistItem, by employee: String) {
+        if let i = checklists.firstIndex(where: { $0.id == item.id }) {
+            checklists[i].isCompleted = true
+            checklists[i].completedBy = employee
+            checklists[i].completedAt = Date()
+        }
+    }
+
+    private func loadDefaultChecklists() {
+        let openingItems = [
+            "Проверить температуру холодильников",
+            "Принять доставку и проверить товар",
+            "Подготовить рабочие станции",
+            "Проверить наличие всех ингредиентов",
+            "Включить оборудование и проверить работу",
+            "Провести брифинг команды"
+        ]
+        let closingItems = [
+            "Списать остатки по итогам смены",
+            "Убрать и продезинфицировать рабочие места",
+            "Проверить и отключить оборудование",
+            "Закрыть холодильники и морозильные камеры",
+            "Провести инвентаризацию на конец дня",
+            "Оформить отчет о смене"
+        ]
+        for text in openingItems {
+            checklists.append(ChecklistItem(text: text, type: .opening))
+        }
+        for text in closingItems {
+            checklists.append(ChecklistItem(text: text, type: .closing))
+        }
+    }
+
+    // MARK: Menu Collections CRUD
+    func addCollection(_ c: MenuCollection) { menuCollections.append(c) }
+    func updateCollection(_ c: MenuCollection) {
+        if let i = menuCollections.firstIndex(where: { $0.id == c.id }) { menuCollections[i] = c }
+    }
+    func deleteCollection(_ c: MenuCollection) { menuCollections.removeAll { $0.id == c.id } }
+
+    // MARK: Work Schedule CRUD
+    func addWorkShift(_ s: WorkShift) { workSchedule.append(s) }
+    func updateWorkShift(_ s: WorkShift) {
+        if let i = workSchedule.firstIndex(where: { $0.id == s.id }) { workSchedule[i] = s }
+    }
+    func deleteWorkShift(_ s: WorkShift) { workSchedule.removeAll { $0.id == s.id } }
+
+    // MARK: Backup
+    func exportBackup() -> URL? {
+        let backup = AppBackup(
+            restaurantName: restaurantName,
+            dishes: dishes,
+            inventoryItems: inventoryItems,
+            deliveries: deliveries,
+            writeOffs: writeOffs,
+            productions: productions,
+            employees: employees,
+            suppliers: suppliers,
+            sales: sales,
+            checklists: checklists,
+            menuCollections: menuCollections,
+            workSchedule: workSchedule,
+            temperatureLogs: temperatureLogs,
+            shiftHistory: shiftHistory
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(backup) else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm"
+        let filename = "ChefPro_backup_\(formatter.string(from: Date())).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try? data.write(to: url, options: .atomic)
+        return url
+    }
+
+    func importBackup(from url: URL) throws {
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(AppBackup.self, from: data)
+        isSyncingFromCloud = true
+        restaurantName   = backup.restaurantName
+        dishes           = backup.dishes
+        inventoryItems   = backup.inventoryItems
+        deliveries       = backup.deliveries
+        writeOffs        = backup.writeOffs
+        productions      = backup.productions
+        employees        = backup.employees
+        suppliers        = backup.suppliers
+        sales            = backup.sales
+        checklists       = backup.checklists
+        menuCollections  = backup.menuCollections
+        workSchedule     = backup.workSchedule
+        temperatureLogs  = backup.temperatureLogs
+        shiftHistory     = backup.shiftHistory
+        isSyncingFromCloud = false
+    }
+
+    // MARK: Spotlight
+    func indexSpotlight() {
+        var items: [CSSearchableItem] = []
+
+        for dish in dishes {
+            let attrs = CSSearchableItemAttributeSet(contentType: .content)
+            attrs.title = dish.name
+            attrs.contentDescription = "\(dish.category) · \(String(format: "%.2f", dish.salePrice)) · FC \(String(format: "%.1f", foodCostPercent(dish)))%"
+            attrs.keywords = [dish.category, "блюдо", "техкарта"] + dish.allergens
+            if let filename = dish.photoFilename {
+                attrs.thumbnailURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(filename)
+            }
+            let item = CSSearchableItem(
+                uniqueIdentifier: "chefpro.dish.\(dish.id.uuidString)",
+                domainIdentifier: "dishes",
+                attributeSet: attrs
+            )
+            items.append(item)
+        }
+
+        for inv in inventoryItems {
+            let attrs = CSSearchableItemAttributeSet(contentType: .content)
+            attrs.title = inv.name
+            attrs.contentDescription = "\(inv.category) · \(String(format: "%.1f", inv.quantity)) \(inv.unit)\(inv.isLowStock ? " · ⚠ Мало" : "")"
+            attrs.keywords = [inv.category, "склад", "продукт"]
+            let item = CSSearchableItem(
+                uniqueIdentifier: "chefpro.inv.\(inv.id.uuidString)",
+                domainIdentifier: "inventory",
+                attributeSet: attrs
+            )
+            items.append(item)
+        }
+
+        CSSearchableIndex.default().indexSearchableItems(items) { _ in }
+    }
+
+    func removeSpotlightIndex() {
+        CSSearchableIndex.default().deleteAllSearchableItems { _ in }
+    }
+
+    // MARK: HACCP Reminders
+    func scheduleHACCPReminders() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["chefpro-haccp-reminder"])
+        guard notificationsEnabled && haccpRemindersEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "HACCP: Запишите температуру"
+        content.body  = "Время зафиксировать температуру холодильников и морозильников"
+        content.sound = .default
+        content.categoryIdentifier = "HACCP"
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: Double(haccpIntervalHours) * 3600,
+            repeats: true
+        )
+        center.add(UNNotificationRequest(
+            identifier: "chefpro-haccp-reminder",
+            content: content,
+            trigger: trigger
+        ))
+    }
+
+    // MARK: Recipe Versions
+    func saveRecipeVersion(for dish: Dish, notes: String = "") {
+        let version = RecipeVersion(
+            dishID: dish.id,
+            dishName: dish.name,
+            savedBy: profile.name,
+            ingredients: dish.ingredients,
+            steps: dish.steps,
+            salePrice: dish.salePrice,
+            cookTime: dish.cookTime,
+            notes: notes
+        )
+        recipeVersions.insert(version, at: 0)
+        if recipeVersions.count > 50 { recipeVersions = Array(recipeVersions.prefix(50)) }
+    }
+
+    func versions(for dish: Dish) -> [RecipeVersion] {
+        recipeVersions.filter { $0.dishID == dish.id }
+    }
+
+    func restoreVersion(_ version: RecipeVersion) {
+        guard let idx = dishes.firstIndex(where: { $0.id == version.dishID }) else { return }
+        dishes[idx].ingredients = version.ingredients
+        dishes[idx].steps       = version.steps
+        dishes[idx].salePrice   = version.salePrice
+        dishes[idx].cookTime    = version.cookTime
+    }
+
+    func shiftsForEmployee(_ employeeID: UUID, in period: DateInterval) -> [WorkShift] {
+        workSchedule.filter { $0.employeeID == employeeID && period.contains($0.date) }
+    }
+
+    // MARK: Temperature Log CRUD
+    func addTemperatureLog(_ log: TemperatureLog) { temperatureLogs.insert(log, at: 0) }
+    func deleteTemperatureLog(_ log: TemperatureLog) { temperatureLogs.removeAll { $0.id == log.id } }
+
+    var temperatureLocations: [String] {
+        let custom = Array(Set(temperatureLogs.map { $0.location })).sorted()
+        let defaults = ["Холодильник 1", "Холодильник 2", "Морозильник"]
+        return Array(Set(defaults + custom)).sorted()
+    }
+
+    func latestLog(for location: String) -> TemperatureLog? {
+        temperatureLogs.filter { $0.location == location }.first
+    }
+
+    func toggleFavorite(_ dish: Dish) {
+        guard let idx = dishes.firstIndex(where: { $0.id == dish.id }) else { return }
+        dishes[idx].isFavorite.toggle()
+    }
+
+    // MARK: Sales
+    func addSale(_ sale: Sale)    { sales.append(sale) }
+    func deleteSale(_ sale: Sale) { sales.removeAll { $0.id == sale.id } }
+
+    // MARK: Production Plan
+    func addPlanItem(_ item: PlanItem)    { currentProductionPlan.append(item) }
+    func removePlanItem(_ item: PlanItem) { currentProductionPlan.removeAll { $0.id == item.id } }
+    func clearProductionPlan()            { currentProductionPlan.removeAll() }
+
+    @discardableResult
+    func executeProductionPlan() -> Int {
+        var executed = 0
+        for planItem in currentProductionPlan {
+            guard let dish = dishes.first(where: { $0.id == planItem.dishID }) else { continue }
+            if produceDish(dish, portions: planItem.portions) {
+                sales.append(Sale(dishName: dish.name, portions: planItem.portions, date: Date(), employee: profile.name))
+                executed += 1
+            }
+        }
+        currentProductionPlan.removeAll()
+        return executed
+    }
+
+    // MARK: Suppliers
+    func addSupplier(_ s: Supplier)    { suppliers.append(s) }
+    func updateSupplier(_ s: Supplier) { if let i = suppliers.firstIndex(where: { $0.id == s.id }) { suppliers[i] = s } }
+    func deleteSupplier(_ s: Supplier) { suppliers.removeAll { $0.id == s.id } }
+
+    // MARK: Notifications
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, _ in
+            DispatchQueue.main.async { self?.notificationsEnabled = granted }
+        }
+    }
+
+    func scheduleNotificationsForLowStock() {
+        guard notificationsEnabled else { return }
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        for item in lowStockItems {
+            let content = UNMutableNotificationContent()
+            content.title = "Нужно заказать: \(item.name)"
+            content.body  = "Осталось \(String(format: "%.1f", item.quantity)) \(item.unit), минимум \(String(format: "%.1f", item.minQuantity)) \(item.unit)"
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)
+            center.add(UNNotificationRequest(identifier: "lowstock-\(item.id)", content: content, trigger: trigger))
+        }
+        scheduleExpiryNotifications()
+        scheduleDailyDigest()
+    }
+
+    func scheduleExpiryNotifications() {
+        guard notificationsEnabled else { return }
+        let center = UNUserNotificationCenter.current()
+        let warningDate = Calendar.current.date(byAdding: .day, value: expiryWarningDays, to: Date()) ?? Date()
+        for item in inventoryItems {
+            guard let expiry = item.expiryDate, expiry > Date(), expiry <= warningDate else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = "Срок годности: \(item.name)"
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
+            content.body  = days == 0 ? "Истекает сегодня!" : "Истекает через \(days) дн."
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+            center.add(UNNotificationRequest(identifier: "expiry-\(item.id)", content: content, trigger: trigger))
+        }
+    }
+
+    func scheduleDailyDigest() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["chefpro-daily-digest"])
+        guard notificationsEnabled && dailyDigestEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Дайджест — \(restaurantName)"
+        var parts: [String] = []
+        if !lowStockItems.isEmpty  { parts.append("⚠ Заканчивается: \(lowStockItems.count) поз.") }
+        if !expiringItems.isEmpty  { parts.append("📅 Срок годности: \(expiringItems.count) поз.") }
+        if parts.isEmpty           { parts.append("✅ Всё в порядке") }
+        content.body  = parts.joined(separator: " · ")
+        content.sound = .default
+        var dc = DateComponents(); dc.hour = 8; dc.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        center.add(UNNotificationRequest(identifier: "chefpro-daily-digest", content: content, trigger: trigger))
+    }
+
+    // MARK: Low Stock Notifications
+
+    /// Schedules a local notification for each item that has fallen below its minimum quantity.
+    /// Uses UserDefaults to track which items already received a notification today so we don't spam.
+    func checkLowStockAndNotify() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else { return }
+
+            // Load the set of item IDs that were already notified today
+            let today = Calendar.current.startOfDay(for: Date())
+            let udKey = "chefpro_lowstock_notified_\(today.timeIntervalSince1970)"
+            var notifiedIDs = Set(UserDefaults.standard.stringArray(forKey: udKey) ?? [])
+
+            for item in self.inventoryItems {
+                guard item.minQuantity > 0, item.quantity <= item.minQuantity else { continue }
+                let idString = item.id.uuidString
+                guard !notifiedIDs.contains(idString) else { continue }
+
+                let content = UNMutableNotificationContent()
+                content.title = "Низкий остаток"
+                content.body  = "\(item.name): осталось \(String(format: "%.1f", item.quantity)) \(item.unit)"
+                content.sound = .default
+
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                let request = UNNotificationRequest(
+                    identifier: "lowstock_\(item.id.uuidString)",
+                    content: content,
+                    trigger: trigger
+                )
+                center.add(request)
+                notifiedIDs.insert(idString)
+            }
+
+            UserDefaults.standard.set(Array(notifiedIDs), forKey: udKey)
+        }
+    }
+
+    /// Removes a pending low-stock notification when an item's stock is replenished.
+    func clearLowStockNotification(for item: InventoryItem) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: ["lowstock_\(item.id.uuidString)"]
+        )
+    }
+
+    func calculateDishCost(_ dish: Dish) -> Double {
+        dish.ingredients.reduce(0) { total, ingredient in
+            guard let item = inventoryItems.first(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            }) else {
+                return total
+            }
+
+            let rawQty = ingredient.yieldFactor > 0 ? ingredient.quantity / ingredient.yieldFactor : ingredient.quantity
+            let convertedQuantity = convert(quantity: rawQty, from: ingredient.unit, to: item.unit)
+            return total + (convertedQuantity * item.pricePerUnit)
+        }
+    }
+
+    func foodCostPercent(_ dish: Dish) -> Double {
+        guard dish.salePrice > 0 else { return 0 }
+        return calculateDishCost(dish) / dish.salePrice * 100
+    }
+
+    func canProduce(dish: Dish, portions: Int) -> Bool {
+        for ingredient in dish.ingredients {
+            guard let index = inventoryItems.firstIndex(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            }) else {
+                return false
+            }
+
+            let item = inventoryItems[index]
+            let needed = convert(quantity: ingredient.quantity * Double(portions), from: ingredient.unit, to: item.unit)
+
+            if item.quantity < needed {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    func produceDish(_ dish: Dish, portions: Int) -> Bool {
+        guard portions >= 1 else { return false }
+        guard canProduce(dish: dish, portions: portions) else {
+            return false
+        }
+
+        // Snapshot cost at current prices before any inventory is modified
+        let snapshotCost = calculateDishCost(dish) * Double(portions)
+
+        for ingredient in dish.ingredients {
+            if let index = inventoryItems.firstIndex(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            }) {
+                let item = inventoryItems[index]
+                let needed = convert(quantity: ingredient.quantity * Double(portions), from: ingredient.unit, to: item.unit)
+                inventoryItems[index].quantity -= needed
+
+                let writeOff = WriteOff(
+                    productName: item.name,
+                    quantity: needed,
+                    unit: item.unit,
+                    reason: "Автосписание: \(dish.name) x\(portions)",
+                    employee: profile.name,
+                    date: Date()
+                )
+                writeOffs.append(writeOff)
+            }
+        }
+
+        let production = Production(
+            dishName: dish.name,
+            portions: portions,
+            totalCost: snapshotCost,
+            date: Date(),
+            employee: profile.name
+        )
+
+        productions.append(production)
+        checkLowStockAndNotify()
+        return true
+    }
+
+    func convert(quantity: Double, from sourceUnit: String, to targetUnit: String) -> Double {
+        if sourceUnit == targetUnit { return quantity }
+
+        if sourceUnit == "г" && targetUnit == "кг" { return quantity / 1000 }
+        if sourceUnit == "кг" && targetUnit == "г" { return quantity * 1000 }
+        if sourceUnit == "мл" && targetUnit == "л" { return quantity / 1000 }
+        if sourceUnit == "л" && targetUnit == "мл" { return quantity * 1000 }
+
+        // Incompatible standard units (e.g. г↔мл) — return 0 to avoid silently wrong cost calculations
+        let standardUnits: Set<String> = ["г", "кг", "мл", "л", "шт"]
+        if standardUnits.contains(sourceUnit) && standardUnits.contains(targetUnit) {
+            return 0
+        }
+
+        return quantity
+    }
+
+    func addDelivery(_ delivery: Delivery) {
+        deliveries.append(delivery)
+
+        let deliveryPricePerUnit = delivery.quantity > 0 ? delivery.price / delivery.quantity : 0
+
+        if let index = inventoryItems.firstIndex(where: {
+            $0.name.lowercased() == delivery.productName.lowercased() && $0.unit == delivery.unit
+        }) {
+            if deliveryPricePerUnit > 0 {
+                let currentValue = inventoryItems[index].quantity * inventoryItems[index].pricePerUnit
+                let newValue     = delivery.quantity * deliveryPricePerUnit
+                let combinedQty  = inventoryItems[index].quantity + delivery.quantity
+                inventoryItems[index].pricePerUnit = combinedQty > 0 ? (currentValue + newValue) / combinedQty : deliveryPricePerUnit
+                inventoryItems[index].priceHistory.append(PricePoint(date: delivery.date, price: deliveryPricePerUnit))
+            }
+            inventoryItems[index].quantity += delivery.quantity
+            // Clear low stock notification if quantity is now above minimum
+            let updatedItem = inventoryItems[index]
+            if updatedItem.quantity > updatedItem.minQuantity {
+                clearLowStockNotification(for: updatedItem)
+            }
+        } else {
+            var newItem = InventoryItem(
+                name: delivery.productName,
+                category: "Без категории",
+                quantity: delivery.quantity,
+                unit: delivery.unit,
+                minQuantity: 1,
+                pricePerUnit: deliveryPricePerUnit
+            )
+            if deliveryPricePerUnit > 0 {
+                newItem.priceHistory = [PricePoint(date: delivery.date, price: deliveryPricePerUnit)]
+            }
+            inventoryItems.append(newItem)
+        }
+    }
+
+    func addWriteOff(_ writeOff: WriteOff) {
+        writeOffs.append(writeOff)
+
+        if let index = inventoryItems.firstIndex(where: {
+            $0.name.lowercased() == writeOff.productName.lowercased() && $0.unit == writeOff.unit
+        }) {
+            // Allow inventory to go negative so accounting discrepancies are visible, not silently hidden
+            inventoryItems[index].quantity -= writeOff.quantity
+        }
+        checkLowStockAndNotify()
+    }
+
+    func updateDish(_ updatedDish: Dish) {
+        if let index = dishes.firstIndex(where: { $0.id == updatedDish.id }) {
+            dishes[index] = updatedDish
+        }
+    }
+
+    func deleteDish(_ dish: Dish) {
+        dishes.removeAll { $0.id == dish.id }
+    }
+
+    func updateInventoryItem(_ updatedItem: InventoryItem) {
+        if let index = inventoryItems.firstIndex(where: { $0.id == updatedItem.id }) {
+            inventoryItems[index] = updatedItem
+        }
+    }
+
+    func deleteInventoryItem(_ item: InventoryItem) {
+        inventoryItems.removeAll { $0.id == item.id }
+    }
+
+    func resetDemoData() {
+        dishes.removeAll()
+        inventoryItems.removeAll()
+        deliveries.removeAll()
+        writeOffs.removeAll()
+        productions.removeAll()
+        employees.removeAll()
+        currentEmployeeID = nil
+        profile = UserProfile(
+            name: "Иван Петров",
+            position: "Шеф-повар",
+            phone: "+47 000 00 000",
+            permissions: ["Техкарты", "Склад", "Приемка", "Списания", "Отчеты", "Настройки"]
+        )
+        loadDemoEmployees()
+        loadDemoData()
+    }
+
+    private func loadDemoEmployees() {
+        employees = [
+            Employee(name: "Иван Петров", position: "Шеф-повар", phone: "+47 000 00 000", pin: "1111", permissions: ["Техкарты", "Склад", "Приемка", "Списания", "Отчеты", "Настройки"]),
+            Employee(name: "Анна Смирнова", position: "Су-шеф", phone: "+47 111 11 111", pin: "2222", permissions: ["Техкарты", "Склад", "Списания", "Отчеты"]),
+            Employee(name: "Олег Иванов", position: "Кладовщик", phone: "+47 222 22 222", pin: "3333", permissions: ["Склад", "Приемка", "Списания"]),
+            Employee(name: "Мария Кузнецова", position: "Администратор", phone: "+47 333 33 333", pin: "4444", permissions: ["Отчеты", "Настройки"])
+        ]
+    }
+
+    private func loadDemoData() {
+        inventoryItems = [
+            InventoryItem(name: "Рис", category: "Бакалея", quantity: 12, unit: "кг", minQuantity: 5, pricePerUnit: 2.2),
+            InventoryItem(name: "Лосось", category: "Рыба", quantity: 4, unit: "кг", minQuantity: 3, pricePerUnit: 18.5),
+            InventoryItem(name: "Курица", category: "Мясо", quantity: 8, unit: "кг", minQuantity: 5, pricePerUnit: 6.8),
+            InventoryItem(name: "Сыр", category: "Молочные продукты", quantity: 2, unit: "кг", minQuantity: 3, pricePerUnit: 9.5),
+            InventoryItem(name: "Нори", category: "Суши", quantity: 50, unit: "шт", minQuantity: 10, pricePerUnit: 0.25),
+            InventoryItem(name: "Салат", category: "Овощи", quantity: 6, unit: "кг", minQuantity: 2, pricePerUnit: 3.1),
+            InventoryItem(name: "Соус", category: "Соусы", quantity: 3, unit: "кг", minQuantity: 1, pricePerUnit: 5.4)
+        ]
+
+        dishes = [
+            Dish(
+                name: "Филадельфия ролл",
+                category: "Суши",
+                salePrice: 14.90,
+                ingredients: [
+                    RecipeIngredient(productName: "Рис", quantity: 120, unit: "г"),
+                    RecipeIngredient(productName: "Лосось", quantity: 60, unit: "г"),
+                    RecipeIngredient(productName: "Сыр", quantity: 35, unit: "г"),
+                    RecipeIngredient(productName: "Нори", quantity: 1, unit: "шт")
+                ]
+            ),
+            Dish(
+                name: "Цезарь с курицей",
+                category: "Салаты",
+                salePrice: 12.50,
+                ingredients: [
+                    RecipeIngredient(productName: "Курица", quantity: 120, unit: "г"),
+                    RecipeIngredient(productName: "Салат", quantity: 80, unit: "г"),
+                    RecipeIngredient(productName: "Соус", quantity: 40, unit: "г"),
+                    RecipeIngredient(productName: "Сыр", quantity: 20, unit: "г")
+                ]
+            )
+        ]
+
+        deliveries = [
+            Delivery(supplier: "Fresh Fish", productName: "Лосось", quantity: 5, unit: "кг", price: 92.50, date: Date(), acceptedBy: "Кладовщик")
+        ]
+
+        writeOffs = []
+        productions = []
+    }
+
+    private func saveData() {
+        save(dishes, key: dishesKey)
+        save(inventoryItems, key: inventoryKey)
+        save(deliveries, key: deliveriesKey)
+        save(writeOffs, key: writeOffsKey)
+        save(productions, key: productionsKey)
+        save(profile, key: profileKey)
+        save(employees, key: employeesKey)
+        save(kitchenOrders, key: kitchenOrdersKey)
+        save(closedKitchenOrders, key: closedKitchenOrdersKey)
+        save(suppliers, key: suppliersKey)
+        save(currentShift, key: currentShiftKey)
+        save(shiftHistory, key: shiftHistoryKey)
+        save(sales, key: salesKey)
+        save(currentProductionPlan, key: productionPlanKey)
+        UserDefaults.standard.set(foodCostThreshold,    forKey: foodCostThresholdKey)
+        UserDefaults.standard.set(purchaseBudget,       forKey: purchaseBudgetKey)
+        UserDefaults.standard.set(expiryWarningDays,    forKey: expiryWarningDaysKey)
+        UserDefaults.standard.set(dailyDigestEnabled,   forKey: dailyDigestKey)
+        UserDefaults.standard.set(haccpRemindersEnabled, forKey: haccpRemindersKey)
+        UserDefaults.standard.set(haccpIntervalHours,    forKey: haccpIntervalHoursKey)
+        UserDefaults.standard.set(hasSeenOnboarding,    forKey: hasSeenOnboardingKey)
+        UserDefaults.standard.set(restaurantName,       forKey: restaurantNameKey)
+        UserDefaults.standard.set(appColorScheme.rawValue, forKey: appColorSchemeKey)
+        UserDefaults.standard.set(notificationsEnabled, forKey: notificationsEnabledKey)
+
+        if let currentEmployeeID {
+            UserDefaults.standard.set(currentEmployeeID.uuidString, forKey: currentEmployeeIDKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: currentEmployeeIDKey)
+        }
+
+        save(checklists, key: checklistsKey)
+        save(menuCollections, key: collectionsKey)
+        save(workSchedule, key: workScheduleKey)
+        save(temperatureLogs, key: temperatureLogsKey)
+        save(recipeVersions, key: recipeVersionsKey)
+        UserDefaults.standard.set(appLanguage.rawValue, forKey: appLanguageKey)
+        writeWidgetSharedData()
+        indexSpotlight()
+        checkLowStockAndNotify()
+        scheduleUpload()
+    }
+
+    // MARK: - Widget Shared Data
+
+    /// Writes summary data to the shared App Group UserDefaults so the widget extension can read it.
+    private func writeWidgetSharedData() {
+        guard let sharedDefaults = UserDefaults(suiteName: "group.com.chefpro.app") else { return }
+
+        // Average food cost across all active dishes with a non-zero sale price
+        let activeDishes = dishes.filter { $0.salePrice > 0 }
+        let avgFoodCost: Double
+        if activeDishes.isEmpty {
+            avgFoodCost = 0
+        } else {
+            let total = activeDishes.reduce(0.0) { $0 + foodCostPercent($1) }
+            avgFoodCost = total / Double(activeDishes.count)
+        }
+
+        sharedDefaults.set(avgFoodCost, forKey: "widget_food_cost_percent")
+        sharedDefaults.set(lowStockItems.count, forKey: "widget_low_stock_count")
+        sharedDefaults.set(restaurantName, forKey: "widget_restaurant_name")
+
+        // Ask WidgetKit to reload all timelines so the widget reflects fresh data
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+
+    // Debounced auto-upload: waits 4 s after the last change before sending to Firestore
+    private func scheduleUpload() {
+        guard !isSyncingFromCloud else { return }
+        uploadTask?.cancel()
+        uploadTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            await self.syncToCloud()
+        }
+    }
+
+    @MainActor
+    func syncToCloud() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        syncError = nil
+        do {
+            try await ChefProFirebaseService.shared.uploadAll(
+                dishes: dishes,
+                inventoryItems: inventoryItems,
+                deliveries: deliveries,
+                writeOffs: writeOffs,
+                productions: productions,
+                employees: employees,
+                profile: profile
+            )
+            lastSyncDate = Date()
+            UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
+        } catch {
+            syncError = error.localizedDescription
+        }
+        isSyncing = false
+    }
+
+    @MainActor
+    func syncFromCloud() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        isSyncingFromCloud = true
+        syncError = nil
+        do {
+            let data = try await ChefProFirebaseService.shared.downloadAll()
+            if !data.dishes.isEmpty        { dishes = data.dishes }
+            if !data.inventoryItems.isEmpty { inventoryItems = data.inventoryItems }
+            if !data.deliveries.isEmpty    { deliveries = data.deliveries }
+            if !data.writeOffs.isEmpty     { writeOffs = data.writeOffs }
+            if !data.productions.isEmpty   { productions = data.productions }
+            if !data.employees.isEmpty     { employees = data.employees }
+            if let p = data.profile        { profile = p }
+            lastSyncDate = Date()
+            UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
+        } catch {
+            syncError = error.localizedDescription
+        }
+        isSyncingFromCloud = false
+        isSyncing = false
+    }
+
+    private func loadData() {
+        dishes = load([Dish].self, key: dishesKey) ?? []
+        inventoryItems = load([InventoryItem].self, key: inventoryKey) ?? []
+        deliveries = load([Delivery].self, key: deliveriesKey) ?? []
+        writeOffs = load([WriteOff].self, key: writeOffsKey) ?? []
+        productions = load([Production].self, key: productionsKey) ?? []
+        profile = load(UserProfile.self, key: profileKey) ?? profile
+        employees = load([Employee].self, key: employeesKey) ?? []
+        kitchenOrders       = load([KitchenOrder].self, key: kitchenOrdersKey) ?? []
+        closedKitchenOrders = load([KitchenOrder].self, key: closedKitchenOrdersKey) ?? []
+        suppliers           = load([Supplier].self, key: suppliersKey) ?? []
+        currentShift        = load(Shift.self, key: currentShiftKey)
+        shiftHistory        = load([Shift].self, key: shiftHistoryKey) ?? []
+        sales               = load([Sale].self, key: salesKey) ?? []
+        currentProductionPlan = load([PlanItem].self, key: productionPlanKey) ?? []
+        let storedThreshold = UserDefaults.standard.double(forKey: foodCostThresholdKey)
+        foodCostThreshold   = storedThreshold > 0 ? storedThreshold : 35
+        purchaseBudget      = UserDefaults.standard.double(forKey: purchaseBudgetKey)
+        let storedDays      = UserDefaults.standard.integer(forKey: expiryWarningDaysKey)
+        expiryWarningDays   = storedDays > 0 ? storedDays : 3
+        dailyDigestEnabled  = UserDefaults.standard.bool(forKey: dailyDigestKey)
+        haccpRemindersEnabled = UserDefaults.standard.bool(forKey: haccpRemindersKey)
+        let storedHACCP = UserDefaults.standard.integer(forKey: haccpIntervalHoursKey)
+        haccpIntervalHours = storedHACCP > 0 ? storedHACCP : 4
+        hasSeenOnboarding   = UserDefaults.standard.bool(forKey: hasSeenOnboardingKey)
+        restaurantName      = UserDefaults.standard.string(forKey: restaurantNameKey) ?? "Demo Restaurant"
+        notificationsEnabled = UserDefaults.standard.bool(forKey: notificationsEnabledKey)
+        if let raw = UserDefaults.standard.string(forKey: appColorSchemeKey),
+           let scheme = AppColorScheme(rawValue: raw) { appColorScheme = scheme }
+
+        checklists      = load([ChecklistItem].self, key: checklistsKey) ?? []
+        menuCollections = load([MenuCollection].self, key: collectionsKey) ?? []
+        workSchedule    = load([WorkShift].self, key: workScheduleKey) ?? []
+        temperatureLogs = load([TemperatureLog].self, key: temperatureLogsKey) ?? []
+        recipeVersions  = load([RecipeVersion].self, key: recipeVersionsKey) ?? []
+        if let raw = UserDefaults.standard.string(forKey: appLanguageKey),
+           let lang = AppLanguage(rawValue: raw) { appLanguage = lang }
+        if let idString = UserDefaults.standard.string(forKey: currentEmployeeIDKey) {
+            currentEmployeeID = UUID(uuidString: idString)
+        }
+    }
+
+    private func save<T: Codable>(_ value: T, key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    private func load<T: Codable>(_ type: T.Type, key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+}

@@ -57,6 +57,10 @@ final class ChefProStore: ObservableObject {
     @Published var appLanguage: AppLanguage = .russian    { didSet { saveData() } }
     @Published var stockMovements: [StockMovement] = []   { didSet { saveData() } }
 
+    @Published var reservations: [TableReservation] = []   { didSet { saveData() } }
+    @Published var loyaltyCards:  [LoyaltyCard]       = []   { didSet { saveData() } }
+    @Published var posRecords:    [POSSaleRecord]      = []   { didSet { saveData() } }
+
     @Published var isSyncing = false
     @Published var lastSyncDate: Date? = nil
     @Published var syncError: String? = nil
@@ -99,6 +103,9 @@ final class ChefProStore: ObservableObject {
     private let recipeVersionsKey     = "chefpro_recipe_versions_v1"
     private let hasInitialDataKey     = "chefpro_has_initial_data_v1"
     private let stockMovementsKey     = "chefpro_stock_movements_v1"
+    private let reservationsKey       = "chefpro_reservations_v1"
+    private let loyaltyCardsKey       = "chefpro_loyalty_cards_v1"
+    private let posRecordsKey         = "chefpro_pos_records_v1"
 
     // MARK: - Data Version Migration
     private let dataVersionKey    = "chefpro_data_version"
@@ -687,6 +694,61 @@ final class ChefProStore: ObservableObject {
         }
         currentProductionPlan.removeAll()
         return executed
+    }
+
+    // MARK: Reservations
+    func addReservation(_ r: TableReservation)    { reservations.append(r) }
+    func updateReservation(_ r: TableReservation) { if let i = reservations.firstIndex(where: { $0.id == r.id }) { reservations[i] = r } }
+    func deleteReservation(_ r: TableReservation) { reservations.removeAll { $0.id == r.id } }
+
+    var todayReservations: [TableReservation] {
+        let cal = Calendar.current
+        return reservations
+            .filter { cal.isDateInToday($0.date) }
+            .sorted { $0.date < $1.date }
+    }
+
+    // MARK: Loyalty
+    func addLoyaltyCard(_ c: LoyaltyCard)    { loyaltyCards.append(c) }
+    func updateLoyaltyCard(_ c: LoyaltyCard) { if let i = loyaltyCards.firstIndex(where: { $0.id == c.id }) { loyaltyCards[i] = c } }
+    func deleteLoyaltyCard(_ c: LoyaltyCard) { loyaltyCards.removeAll { $0.id == c.id } }
+
+    func addPurchaseToLoyalty(cardID: UUID, amount: Double, description: String = "") {
+        guard let idx = loyaltyCards.firstIndex(where: { $0.id == cardID }) else { return }
+        let pts = Int(amount / 100)   // 1 балл за каждые 100₽
+        let tx = LoyaltyTransaction(amount: amount, points: pts, description: description)
+        loyaltyCards[idx].transactions.insert(tx, at: 0)
+        loyaltyCards[idx].totalSpent  += amount
+        loyaltyCards[idx].points      += pts
+        loyaltyCards[idx].visitsCount += 1
+        hapticNotification(.success)
+    }
+
+    func redeemLoyaltyPoints(cardID: UUID, points: Int) {
+        guard let idx = loyaltyCards.firstIndex(where: { $0.id == cardID }),
+              loyaltyCards[idx].points >= points else { return }
+        let amount = Double(points)   // 1 балл = 1₽
+        let tx = LoyaltyTransaction(amount: -amount, points: -points, description: "Списание баллов")
+        loyaltyCards[idx].transactions.insert(tx, at: 0)
+        loyaltyCards[idx].points -= points
+        haptic(.medium)
+    }
+
+    func loyaltyCard(forPhone phone: String) -> LoyaltyCard? {
+        loyaltyCards.first { $0.phone == phone }
+    }
+
+    // MARK: POS Records
+    func addPOSRecord(_ r: POSSaleRecord)  { posRecords.append(r) }
+    func deletePOSRecord(_ r: POSSaleRecord) { posRecords.removeAll { $0.id == r.id } }
+
+    func importPOSRecords(_ records: [POSSaleRecord]) {
+        posRecords.append(contentsOf: records)
+        // Auto-create sales entries
+        for record in records {
+            sales.append(Sale(dishName: record.dishName, portions: record.quantity, date: record.date, employee: "POS Import"))
+        }
+        hapticNotification(.success)
     }
 
     // MARK: Suppliers
@@ -1310,6 +1372,9 @@ final class ChefProStore: ObservableObject {
         save(temperatureLogs, key: temperatureLogsKey)
         save(recipeVersions, key: recipeVersionsKey)
         save(stockMovements, key: stockMovementsKey)
+        save(reservations, key: reservationsKey)
+        save(loyaltyCards,  key: loyaltyCardsKey)
+        save(posRecords,    key: posRecordsKey)
         UserDefaults.standard.set(appLanguage.rawValue, forKey: appLanguageKey)
         writeWidgetSharedData()
         indexSpotlight()
@@ -1446,6 +1511,9 @@ final class ChefProStore: ObservableObject {
         temperatureLogs = load([TemperatureLog].self, key: temperatureLogsKey) ?? []
         recipeVersions  = load([RecipeVersion].self, key: recipeVersionsKey) ?? []
         stockMovements  = load([StockMovement].self, key: stockMovementsKey) ?? []
+        reservations    = load([TableReservation].self, key: reservationsKey) ?? []
+        loyaltyCards    = load([LoyaltyCard].self,      key: loyaltyCardsKey) ?? []
+        posRecords      = load([POSSaleRecord].self,     key: posRecordsKey) ?? []
         if let raw = UserDefaults.standard.string(forKey: appLanguageKey),
            let lang = AppLanguage(rawValue: raw) { appLanguage = lang }
         if let idString = UserDefaults.standard.string(forKey: currentEmployeeIDKey) {

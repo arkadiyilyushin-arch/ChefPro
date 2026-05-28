@@ -424,3 +424,153 @@ struct RecipeVersion: Identifiable, Codable {
     var cookTime: Int
     var notes: String = ""
 }
+
+// MARK: - Table Reservations
+
+enum ReservationStatus: String, Codable, CaseIterable {
+    case confirmed = "Подтверждено"
+    case arrived   = "Пришли"
+    case cancelled = "Отменено"
+    case noShow    = "Не пришли"
+
+    var icon: String {
+        switch self {
+        case .confirmed: return "checkmark.circle.fill"
+        case .arrived:   return "person.fill.checkmark"
+        case .cancelled: return "xmark.circle.fill"
+        case .noShow:    return "person.fill.xmark"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .confirmed: return .blue
+        case .arrived:   return .green
+        case .cancelled: return .red
+        case .noShow:    return .orange
+        }
+    }
+}
+
+struct TableReservation: Identifiable, Codable {
+    var id           = UUID()
+    var guestName:   String
+    var guestPhone:  String   = ""
+    var tableNumber: String
+    var persons:     Int
+    var date:        Date
+    var duration:    Int      = 120   // minutes
+    var notes:       String   = ""
+    var status:      ReservationStatus = .confirmed
+    var createdBy:   String   = ""
+
+    var endDate: Date { date.addingTimeInterval(Double(duration) * 60) }
+}
+
+// MARK: - Loyalty
+
+enum LoyaltyTier: String, Codable, CaseIterable {
+    case bronze   = "Бронза"
+    case silver   = "Серебро"
+    case gold     = "Золото"
+    case platinum = "Платина"
+
+    var minSpent: Double {
+        switch self {
+        case .bronze:   return 0
+        case .silver:   return 10_000
+        case .gold:     return 30_000
+        case .platinum: return 100_000
+        }
+    }
+    var discount: Int {
+        switch self {
+        case .bronze:   return 3
+        case .silver:   return 5
+        case .gold:     return 7
+        case .platinum: return 10
+        }
+    }
+    var icon: String {
+        switch self {
+        case .bronze:   return "medal.fill"
+        case .silver:   return "star.fill"
+        case .gold:     return "crown.fill"
+        case .platinum: return "diamond.fill"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .bronze:   return Color(red: 0.8, green: 0.5, blue: 0.2)
+        case .silver:   return Color.gray
+        case .gold:     return Color.yellow
+        case .platinum: return Color.cyan
+        }
+    }
+
+    static func tier(for spent: Double) -> LoyaltyTier {
+        if spent >= LoyaltyTier.platinum.minSpent { return .platinum }
+        if spent >= LoyaltyTier.gold.minSpent     { return .gold }
+        if spent >= LoyaltyTier.silver.minSpent   { return .silver }
+        return .bronze
+    }
+}
+
+struct LoyaltyTransaction: Identifiable, Codable {
+    var id     = UUID()
+    var date:  Date = Date()
+    var amount: Double
+    var points: Int
+    var description: String = ""
+}
+
+struct LoyaltyCard: Identifiable, Codable {
+    var id            = UUID()
+    var cardNumber:   String
+    var guestName:    String
+    var phone:        String  = ""
+    var email:        String  = ""
+    var points:       Int     = 0
+    var totalSpent:   Double  = 0
+    var visitsCount:  Int     = 0
+    var registeredAt: Date    = Date()
+    var transactions: [LoyaltyTransaction] = []
+
+    var tier: LoyaltyTier { LoyaltyTier.tier(for: totalSpent) }
+
+    var pointsToNextTier: Int {
+        let tiers = LoyaltyTier.allCases
+        guard let idx = tiers.firstIndex(of: tier), idx + 1 < tiers.count else { return 0 }
+        let next = tiers[idx + 1]
+        return Int((next.minSpent - totalSpent) / 10)
+    }
+}
+
+// MARK: - POS Integration
+
+enum POSSystem: String, Codable, CaseIterable {
+    case iiko   = "iiko"
+    case poster = "Poster"
+    case rkeeper = "r_keeper"
+    case tillypad = "Tillypad"
+    case manual = "Ручной ввод"
+
+    var icon: String {
+        switch self {
+        case .iiko:     return "server.rack"
+        case .poster:   return "cloud.fill"
+        case .rkeeper:  return "building.2.fill"
+        case .tillypad: return "desktopcomputer"
+        case .manual:   return "square.and.pencil"
+        }
+    }
+}
+
+struct POSSaleRecord: Identifiable, Codable {
+    var id         = UUID()
+    var date:      Date
+    var dishName:  String
+    var quantity:  Int
+    var amount:    Double
+    var posSystem: POSSystem
+    var importedAt: Date = Date()
+}

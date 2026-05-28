@@ -299,6 +299,67 @@ struct MoreView: View {
                     }
                 }
 
+                // ── Новые модули ────────────────────────────────
+                Section("Гости и сервис") {
+                    NavigationLink {
+                        TableReservationView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Бронирование столиков", systemImage: "calendar.badge.plus")
+                            Spacer()
+                            let todayCount = store.todayReservations.filter { $0.status == .confirmed }.count
+                            if todayCount > 0 {
+                                Text("\(todayCount)")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.blue.opacity(0.15))
+                                    .foregroundStyle(.blue)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    NavigationLink {
+                        LoyaltyView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Программа лояльности", systemImage: "star.circle.fill")
+                            Spacer()
+                            if !store.loyaltyCards.isEmpty {
+                                Text("\(store.loyaltyCards.count)")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .foregroundStyle(.orange)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    NavigationLink {
+                        POSIntegrationView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Интеграция с кассой", systemImage: "server.rack")
+                            Spacer()
+                            if !store.posRecords.isEmpty {
+                                Text("\(store.posRecords.count)")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.green.opacity(0.15))
+                                    .foregroundStyle(.green)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                Section("Аналитика склада") {
+                    NavigationLink {
+                        ABCAnalysisView().environmentObject(store)
+                    } label: { Label("ABC-анализ склада", systemImage: "chart.bar.doc.horizontal") }
+                }
+
                 // ── Управление ──────────────────────────────────
                 Section("Управление") {
                     NavigationLink {

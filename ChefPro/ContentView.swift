@@ -181,6 +181,11 @@ struct iPadMainView: View {
         case temperature = "Температурный журнал"
         case settings   = "Настройки"
         case backup     = "Резервная копия"
+        // Новые модули
+        case reservations = "Бронирование"
+        case loyalty      = "Лояльность"
+        case posIntegration = "Касса"
+        case abcAnalysis  = "ABC-анализ"
 
         var id: String { rawValue }
 
@@ -218,6 +223,10 @@ struct iPadMainView: View {
             case .temperature:    return "thermometer.medium"
             case .settings:       return "gear"
             case .backup:         return "externaldrive.fill"
+            case .reservations:   return "calendar.badge.plus"
+            case .loyalty:        return "star.circle.fill"
+            case .posIntegration: return "server.rack"
+            case .abcAnalysis:    return "chart.bar.doc.horizontal"
             }
         }
     }
@@ -225,9 +234,10 @@ struct iPadMainView: View {
     // Sidebar groups
     private let mainSections: [AppSection] = [.dashboard, .techCards, .inventory, .deliveries]
     private let opsSections:  [AppSection] = [.shift, .kitchenBoard, .waiterMode, .purchases, .writeOffs, .kitchenMode]
-    private let analyticsSections: [AppSection] = [.analytics, .sales, .reports, .profitLoss, .foodCostTrend, .pdfReports, .writeOffReport, .csvExport, .supplierAnalytics]
+    private let analyticsSections: [AppSection] = [.analytics, .sales, .reports, .profitLoss, .foodCostTrend, .pdfReports, .writeOffReport, .csvExport, .supplierAnalytics, .abcAnalysis]
     private let toolsSections: [AppSection] = [.stockMovements, .markupCalc, .unitConverter, .audit, .menuEng]
     private let staffSections: [AppSection] = [.employees, .schedule, .suppliers]
+    private let guestSections: [AppSection] = [.reservations, .loyalty, .posIntegration]
     private let systemSections: [AppSection] = [.profile, .checklists, .temperature, .settings, .backup]
 
     var body: some View {
@@ -247,6 +257,9 @@ struct iPadMainView: View {
                 }
                 Section("Персонал") {
                     ForEach(staffSections) { s in sidebarRow(s) }
+                }
+                Section("Гости и сервис") {
+                    ForEach(guestSections) { s in sidebarRow(s) }
                 }
                 Section("Система") {
                     ForEach(systemSections) { s in sidebarRow(s) }
@@ -325,6 +338,10 @@ struct iPadMainView: View {
         case .temperature:    TemperatureLogView().environmentObject(store)
         case .settings:       SettingsView().environmentObject(store)
         case .backup:         BackupView().environmentObject(store)
+        case .reservations:   TableReservationView().environmentObject(store)
+        case .loyalty:        LoyaltyView().environmentObject(store)
+        case .posIntegration: POSIntegrationView().environmentObject(store)
+        case .abcAnalysis:    ABCAnalysisView().environmentObject(store)
         }
     }
 }

@@ -65,6 +65,10 @@ struct MoreView: View {
                     }
 
                     NavigationLink {
+                        WaiterModeView().environmentObject(store)
+                    } label: { Label("Режим официанта", systemImage: "person.wave.2.fill") }
+
+                    NavigationLink {
                         PermissionGate(permission: "Списания") { WriteOffsView() }
                             .environmentObject(store)
                     } label: { Label("Списания", systemImage: "trash.fill") }
@@ -83,6 +87,10 @@ struct MoreView: View {
                     NavigationLink {
                         AnalyticsView().environmentObject(store)
                     } label: { Label("Аналитика", systemImage: "chart.line.uptrend.xyaxis") }
+
+                    NavigationLink {
+                        SupplierAnalyticsView().environmentObject(store)
+                    } label: { Label("Аналитика поставщиков", systemImage: "building.2.crop.circle.fill") }
 
                     NavigationLink {
                         MenuEngineeringView().environmentObject(store)
@@ -127,12 +135,28 @@ struct MoreView: View {
                     } label: { Label("PDF-отчеты", systemImage: "doc.richtext.fill") }
 
                     NavigationLink {
+                        WriteOffReportView().environmentObject(store)
+                    } label: { Label("Отчёт по списаниям", systemImage: "chart.bar.doc.horizontal.fill") }
+
+                    NavigationLink {
                         CSVExportView().environmentObject(store)
                     } label: { Label("CSV-экспорт", systemImage: "tablecells") }
+
+                    NavigationLink {
+                        PurchaseForecastView().environmentObject(store)
+                    } label: { Label("Прогноз закупок", systemImage: "chart.line.downtrend.xyaxis") }
+
+                    NavigationLink {
+                        BreakevenView().environmentObject(store)
+                    } label: { Label("Точка безубыточности", systemImage: "chart.line.uptrend.xyaxis") }
                 }
 
                 // ── Инструменты ─────────────────────────────────
                 Section("Инструменты") {
+                    NavigationLink {
+                        StockMovementsView().environmentObject(store)
+                    } label: { Label("История движений", systemImage: "clock.arrow.circlepath") }
+
                     NavigationLink {
                         GlobalSearchView().environmentObject(store)
                     } label: { Label("Поиск", systemImage: "magnifyingglass") }
@@ -144,6 +168,10 @@ struct MoreView: View {
                     NavigationLink {
                         PriceCalculatorView().environmentObject(store)
                     } label: { Label("Калькулятор цены", systemImage: "percent") }
+
+                    NavigationLink {
+                        MarkupCalculatorView().environmentObject(store)
+                    } label: { Label("Калькулятор наценки", systemImage: "arrow.up.right.circle.fill") }
 
                     NavigationLink {
                         ProfitabilityRankingView().environmentObject(store)
@@ -191,6 +219,14 @@ struct MoreView: View {
                     NavigationLink {
                         BarcodeScannerView().environmentObject(store)
                     } label: { Label("QR / Barcode", systemImage: "barcode.viewfinder") }
+
+                    NavigationLink {
+                        UnitConverterView()
+                    } label: { Label("Конвертер единиц", systemImage: "arrow.left.arrow.right") }
+
+                    NavigationLink {
+                        DigitalMenuView().environmentObject(store)
+                    } label: { Label("Цифровое меню", systemImage: "menucard.fill") }
                 }
 
                 // ── Персонал ────────────────────────────────────

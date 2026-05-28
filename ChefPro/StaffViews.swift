@@ -221,6 +221,7 @@ struct AddEditEmployeeView: View {
 struct ShiftView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showCloseAlert  = false
+    @State private var showCloseSheet  = false
     @State private var showDigestShare = false
     @State private var digestText      = ""
 
@@ -271,7 +272,7 @@ struct ShiftView: View {
                     }
 
                     BigActionButton(title: "Закрыть смену", icon: "stop.circle.fill") {
-                        showCloseAlert = true
+                        showCloseSheet = true
                     }
 
                 } else {
@@ -313,6 +314,40 @@ struct ShiftView: View {
                                         .clipShape(Capsule())
                                 }
                                 Text("Сотрудник: \(shift.openedBy)").font(.caption).foregroundStyle(.secondary)
+
+                                // Revenue data (if recorded)
+                                if shift.revenue > 0 {
+                                    Divider()
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Выручка").font(.caption).foregroundStyle(.secondary)
+                                            Text("\(Int(shift.revenue))")
+                                                .font(.subheadline.bold()).foregroundStyle(.green)
+                                        }
+                                        Spacer()
+                                        if shift.guestsCount > 0 {
+                                            VStack(alignment: .center, spacing: 2) {
+                                                Text("Гостей").font(.caption).foregroundStyle(.secondary)
+                                                Text("\(shift.guestsCount)").font(.subheadline.bold())
+                                            }
+                                            Spacer()
+                                            VStack(alignment: .trailing, spacing: 2) {
+                                                Text("Ср. чек").font(.caption).foregroundStyle(.secondary)
+                                                Text("\(Int(shift.averageCheck))").font(.subheadline.bold()).foregroundStyle(.chefAccent)
+                                            }
+                                        }
+                                        if shift.foodCostForShift > 0 {
+                                            Spacer()
+                                            VStack(alignment: .trailing, spacing: 2) {
+                                                Text("Food Cost").font(.caption).foregroundStyle(.secondary)
+                                                Text("\(shift.foodCostForShift, specifier: "%.1f")%")
+                                                    .font(.subheadline.bold())
+                                                    .foregroundStyle(shift.foodCostForShift > 35 ? .red : .green)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Divider()
                                 HStack {
                                     shiftHistoryStat(icon: "flame.fill",       color: .orange, value: shift.productionsCount, label: "произв.")
@@ -323,6 +358,11 @@ struct ShiftView: View {
                                 }
                             }
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                store.shiftHistory.removeAll { $0.id == shift.id }
+                            } label: { Label("Удалить", systemImage: "trash") }
+                        }
                     }
                 }
             }
@@ -330,17 +370,16 @@ struct ShiftView: View {
         }
         .background(Color.chefBackground)
         .navigationTitle("Смена")
-        .alert("Закрыть смену?", isPresented: $showCloseAlert) {
-            Button("Отмена", role: .cancel) {}
-            Button("Закрыть", role: .destructive) {
+        .sheet(isPresented: $showCloseSheet) {
+            CloseShiftFormView(onClose: { cash, card, guests in
                 if let shift = store.currentShift {
                     digestText = buildDigest(shift: shift)
                 }
-                store.closeShift()
+                store.closeShiftWithRevenue(cashRevenue: cash, cardRevenue: card, guestsCount: guests)
+                showCloseSheet = false
                 showDigestShare = true
-            }
-        } message: {
-            Text("Смена будет зафиксирована в истории.")
+            })
+            .environmentObject(store)
         }
         .sheet(isPresented: $showDigestShare) {
             ShareSheet(items: [digestText])
@@ -392,6 +431,136 @@ struct ShiftView: View {
         HStack(spacing: 4) {
             Image(systemName: icon).foregroundStyle(color).font(.caption)
             Text("\(value) \(label)").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Close Shift Form
+
+struct CloseShiftFormView: View {
+    @EnvironmentObject var store: ChefProStore
+    @Environment(\.dismiss) private var dismiss
+
+    let onClose: (Double, Double, Int) -> Void
+
+    @State private var cashText    = ""
+    @State private var cardText    = ""
+    @State private var guestsText  = ""
+
+    private var cash:    Double { Double(cashText.replacingOccurrences(of: ",", with: "."))   ?? 0 }
+    private var card:    Double { Double(cardText.replacingOccurrences(of: ",", with: "."))   ?? 0 }
+    private var guests:  Int    { Int(guestsText) ?? 0 }
+    private var total:   Double { cash + card }
+    private var avgCheck: Double { guests > 0 ? total / Double(guests) : 0 }
+
+    private var productionCost: Double {
+        guard let shift = store.currentShift else { return 0 }
+        return store.productions.filter { $0.date >= shift.openedAt }.reduce(0) { $0 + $1.totalCost }
+    }
+    private var foodCostPercent: Double {
+        total > 0 ? (productionCost / total) * 100 : 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Закрытие смены") {
+                    if let shift = store.currentShift {
+                        HStack {
+                            Text("Длительность")
+                            Spacer()
+                            Text(shift.duration).foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Text("Открыл")
+                            Spacer()
+                            Text(shift.openedBy).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section("Выручка") {
+                    HStack {
+                        Label("Наличные", systemImage: "banknote")
+                        Spacer()
+                        TextField("0", text: $cashText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 120)
+                    }
+                    HStack {
+                        Label("Безнал", systemImage: "creditcard")
+                        Spacer()
+                        TextField("0", text: $cardText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 120)
+                    }
+                    HStack {
+                        Text("Итого").bold()
+                        Spacer()
+                        Text(total > 0 ? "\(Int(total))" : "—")
+                            .bold().foregroundStyle(.chefAccent)
+                    }
+                }
+
+                Section("Гости") {
+                    HStack {
+                        Label("Количество гостей", systemImage: "person.2")
+                        Spacer()
+                        TextField("0", text: $guestsText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                    if guests > 0 && total > 0 {
+                        HStack {
+                            Text("Средний чек")
+                            Spacer()
+                            Text("\(Int(avgCheck))").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if productionCost > 0 {
+                    Section("Food Cost") {
+                        HStack {
+                            Text("Себестоимость производства")
+                            Spacer()
+                            Text("\(Int(productionCost))").foregroundStyle(.secondary)
+                        }
+                        if total > 0 {
+                            HStack {
+                                Text("Food Cost %").bold()
+                                Spacer()
+                                Text("\(foodCostPercent, specifier: "%.1f")%")
+                                    .bold()
+                                    .foregroundStyle(foodCostPercent > Double(store.foodCostThreshold) ? .red : .green)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        onClose(cash, card, guests)
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("Закрыть смену", systemImage: "stop.circle.fill")
+                                .font(.headline)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Закрытие смены")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }
+                }
+            }
         }
     }
 }

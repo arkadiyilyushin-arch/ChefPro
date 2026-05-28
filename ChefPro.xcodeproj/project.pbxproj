@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		06C321A62FC5F6AD006722E6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 06C321A52FC5F6AC006722E6 /* WidgetKit.framework */; };
+		06C321A82FC5F6AD006722E6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 06C321A72FC5F6AD006722E6 /* SwiftUI.framework */; };
+		06C321B32FC5F6B3006722E6 /* ChefProWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 06C321A32FC5F6AC006722E6 /* ChefProWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		06C65A9D2FB8281F004DAE17 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 06C65A9C2FB8281F004DAE17 /* GoogleService-Info.plist */; };
 		06C65AA02FB828F8004DAE17 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 06C65A9F2FB828F8004DAE17 /* FirebaseAuth */; };
 		06C65AA22FB828F8004DAE17 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 06C65AA12FB828F8004DAE17 /* FirebaseCore */; };
@@ -30,12 +33,37 @@
 			remoteGlobalIDString = 061E6F0C2FB6E4F8000D4A60;
 			remoteInfo = ChefPro;
 		};
+		06C321B12FC5F6B3006722E6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 061E6F052FB6E4F8000D4A60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 06C321A22FC5F6AC006722E6;
+			remoteInfo = ChefProWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		06C321B82FC5F6B3006722E6 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				06C321B32FC5F6B3006722E6 /* ChefProWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		061E6F0D2FB6E4F8000D4A60 /* ChefPro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChefPro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		061E6F1A2FB6E4FB000D4A60 /* ChefProTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChefProTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		061E6F242FB6E4FB000D4A60 /* ChefProUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChefProUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		06C321A32FC5F6AC006722E6 /* ChefProWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChefProWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		06C321A52FC5F6AC006722E6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		06C321A72FC5F6AD006722E6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		06C321B92FC5F6EA006722E6 /* ChefProWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ChefProWidgetExtension.entitlements; sourceTree = "<group>"; };
 		06C65A9C2FB8281F004DAE17 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		06C65AA52FB82DA9004DAE17 /* ChefProFirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChefProFirebaseService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -54,6 +82,11 @@
 		061E6F272FB6E4FB000D4A60 /* ChefProUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ChefProUITests;
+			sourceTree = "<group>";
+		};
+		06C321A92FC5F6AD006722E6 /* ChefProWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChefProWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -84,16 +117,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		06C321A02FC5F6AC006722E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06C321A82FC5F6AD006722E6 /* SwiftUI.framework in Frameworks */,
+				06C321A62FC5F6AD006722E6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		061E6F042FB6E4F8000D4A60 = {
 			isa = PBXGroup;
 			children = (
+				06C321B92FC5F6EA006722E6 /* ChefProWidgetExtension.entitlements */,
 				06C65AA52FB82DA9004DAE17 /* ChefProFirebaseService.swift */,
 				061E6F0F2FB6E4F8000D4A60 /* ChefPro */,
 				061E6F1D2FB6E4FB000D4A60 /* ChefProTests */,
 				061E6F272FB6E4FB000D4A60 /* ChefProUITests */,
+				06C321A92FC5F6AD006722E6 /* ChefProWidgetExtension */,
+				06C321A42FC5F6AC006722E6 /* Frameworks */,
 				061E6F0E2FB6E4F8000D4A60 /* Products */,
 				06C65A9C2FB8281F004DAE17 /* GoogleService-Info.plist */,
 			);
@@ -105,8 +150,18 @@
 				061E6F0D2FB6E4F8000D4A60 /* ChefPro.app */,
 				061E6F1A2FB6E4FB000D4A60 /* ChefProTests.xctest */,
 				061E6F242FB6E4FB000D4A60 /* ChefProUITests.xctest */,
+				06C321A32FC5F6AC006722E6 /* ChefProWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		06C321A42FC5F6AC006722E6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				06C321A52FC5F6AC006722E6 /* WidgetKit.framework */,
+				06C321A72FC5F6AD006722E6 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -119,10 +174,12 @@
 				061E6F092FB6E4F8000D4A60 /* Sources */,
 				061E6F0A2FB6E4F8000D4A60 /* Frameworks */,
 				061E6F0B2FB6E4F8000D4A60 /* Resources */,
+				06C321B82FC5F6B3006722E6 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				06C321B22FC5F6B3006722E6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				061E6F0F2FB6E4F8000D4A60 /* ChefPro */,
@@ -184,6 +241,28 @@
 			productReference = 061E6F242FB6E4FB000D4A60 /* ChefProUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		06C321A22FC5F6AC006722E6 /* ChefProWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 06C321B52FC5F6B3006722E6 /* Build configuration list for PBXNativeTarget "ChefProWidgetExtension" */;
+			buildPhases = (
+				06C3219F2FC5F6AC006722E6 /* Sources */,
+				06C321A02FC5F6AC006722E6 /* Frameworks */,
+				06C321A12FC5F6AC006722E6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				06C321A92FC5F6AD006722E6 /* ChefProWidgetExtension */,
+			);
+			name = ChefProWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = ChefProWidgetExtension;
+			productReference = 06C321A32FC5F6AC006722E6 /* ChefProWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -205,6 +284,9 @@
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = 061E6F0C2FB6E4F8000D4A60;
 					};
+					06C321A22FC5F6AC006722E6 = {
+						CreatedOnToolsVersion = 16.4;
+					};
 				};
 			};
 			buildConfigurationList = 061E6F082FB6E4F8000D4A60 /* Build configuration list for PBXProject "ChefPro" */;
@@ -213,6 +295,7 @@
 			knownRegions = (
 				en,
 				Base,
+				ru,
 			);
 			mainGroup = 061E6F042FB6E4F8000D4A60;
 			minimizedProjectReferenceProxies = 1;
@@ -227,6 +310,7 @@
 				061E6F0C2FB6E4F8000D4A60 /* ChefPro */,
 				061E6F192FB6E4FB000D4A60 /* ChefProTests */,
 				061E6F232FB6E4FB000D4A60 /* ChefProUITests */,
+				06C321A22FC5F6AC006722E6 /* ChefProWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -248,6 +332,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		061E6F222FB6E4FB000D4A60 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		06C321A12FC5F6AC006722E6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -279,6 +370,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		06C3219F2FC5F6AC006722E6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -291,6 +389,11 @@
 			isa = PBXTargetDependency;
 			target = 061E6F0C2FB6E4F8000D4A60 /* ChefPro */;
 			targetProxy = 061E6F252FB6E4FB000D4A60 /* PBXContainerItemProxy */;
+		};
+		06C321B22FC5F6B3006722E6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 06C321A22FC5F6AC006722E6 /* ChefProWidgetExtension */;
+			targetProxy = 06C321B12FC5F6B3006722E6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -421,6 +524,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ChefPro/ChefPro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = B5NX23WWTS;
@@ -450,6 +554,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ChefPro/ChefPro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = B5NX23WWTS;
@@ -546,6 +651,60 @@
 			};
 			name = Release;
 		};
+		06C321B62FC5F6B3006722E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ChefProWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B5NX23WWTS;
+				INFOPLIST_FILE = ChefProWidgetInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ChefProWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ChefPro.ChefProWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		06C321B72FC5F6B3006722E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ChefProWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = B5NX23WWTS;
+				INFOPLIST_FILE = ChefProWidgetInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ChefProWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ChefPro.ChefProWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -581,6 +740,15 @@
 			buildConfigurations = (
 				061E6F352FB6E4FB000D4A60 /* Debug */,
 				061E6F362FB6E4FB000D4A60 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		06C321B52FC5F6B3006722E6 /* Build configuration list for PBXNativeTarget "ChefProWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				06C321B62FC5F6B3006722E6 /* Debug */,
+				06C321B72FC5F6B3006722E6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

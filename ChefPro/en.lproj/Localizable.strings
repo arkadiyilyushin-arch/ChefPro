@@ -1,0 +1,58 @@
+/* Tab bar */
+"tab.dashboard" = "Dashboard";
+"tab.techcards" = "Recipes";
+"tab.inventory" = "Inventory";
+"tab.deliveries" = "Deliveries";
+"tab.more" = "More";
+
+/* Dashboard */
+"dashboard.greeting.morning" = "Good morning";
+"dashboard.greeting.afternoon" = "Good afternoon";
+"dashboard.greeting.evening" = "Good evening";
+"dashboard.low_stock" = "Low Stock";
+"dashboard.high_food_cost" = "High Food Cost";
+
+/* Common */
+"common.save" = "Save";
+"common.cancel" = "Cancel";
+"common.delete" = "Delete";
+"common.add" = "Add";
+"common.edit" = "Edit";
+"common.search" = "Search";
+
+/* Inventory */
+"inventory.title" = "Inventory";
+"inventory.low_stock" = "Low stock";
+"inventory.expiring" = "Expiring soon";
+"inventory.add_item" = "Add Item";
+
+/* Deliveries */
+"deliveries.title" = "Deliveries";
+"deliveries.new" = "New Delivery";
+"deliveries.supplier" = "Supplier";
+"deliveries.product" = "Product";
+"deliveries.quantity" = "Quantity";
+"deliveries.price" = "Total price";
+
+/* Tech cards */
+"techcards.title" = "Recipes";
+"techcards.cost" = "Cost";
+"techcards.foodcost" = "Food Cost";
+"techcards.ingredients" = "Ingredients";
+"techcards.steps" = "Steps";
+"techcards.allergens" = "Allergens";
+
+/* Staff */
+"staff.title" = "Staff";
+"staff.shift_open" = "Shift open";
+"staff.shift_closed" = "Shift closed";
+"staff.open_shift" = "Open Shift";
+"staff.close_shift" = "Close Shift";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.language" = "Language";
+"settings.theme" = "Theme";
+"settings.notifications" = "Notifications";
+"settings.food_cost_threshold" = "Food Cost Threshold";
+"settings.restaurant_name" = "Restaurant Name";

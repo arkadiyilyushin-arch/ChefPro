@@ -3,6 +3,15 @@ import UserNotifications
 import CoreSpotlight
 import WidgetKit
 
+// MARK: - Undo Support
+
+struct UndoableItem {
+    enum ItemType { case dish, inventoryItem, writeOff, delivery, employee, supplier }
+    let type: ItemType
+    let description: String
+    let restore: () -> Void
+}
+
 // MARK: - Store
 
 final class ChefProStore: ObservableObject {
@@ -33,6 +42,8 @@ final class ChefProStore: ObservableObject {
     @Published var foodCostThreshold: Double = 35                   { didSet { saveData() } }
     @Published var currentProductionPlan: [PlanItem] = []           { didSet { saveData() } }
     @Published var purchaseBudget: Double = 0                       { didSet { saveData() } }
+    @Published var monthlyRevenuePlan: Double = 0                   { didSet { saveData() } }
+    @Published var monthlyFoodCostTarget: Double = 30               { didSet { saveData() } }
     @Published var expiryWarningDays: Int = 3                       { didSet { saveData() } }
     @Published var dailyDigestEnabled: Bool = false                 { didSet { saveData(); scheduleDailyDigest() } }
     @Published var haccpRemindersEnabled: Bool = false              { didSet { saveData(); scheduleHACCPReminders() } }
@@ -44,10 +55,13 @@ final class ChefProStore: ObservableObject {
     @Published var temperatureLogs: [TemperatureLog] = [] { didSet { saveData() } }
     @Published var recipeVersions: [RecipeVersion] = []   { didSet { saveData() } }
     @Published var appLanguage: AppLanguage = .russian    { didSet { saveData() } }
+    @Published var stockMovements: [StockMovement] = []   { didSet { saveData() } }
 
     @Published var isSyncing = false
     @Published var lastSyncDate: Date? = nil
     @Published var syncError: String? = nil
+
+    @Published var undoItem: UndoableItem? = nil
 
     private let dishesKey = "chefpro_dishes_v2"
     private let inventoryKey = "chefpro_inventory_v2"
@@ -69,8 +83,10 @@ final class ChefProStore: ObservableObject {
     private let salesKey                = "chefpro_sales_v1"
     private let foodCostThresholdKey    = "chefpro_fc_threshold_v1"
     private let productionPlanKey       = "chefpro_plan_v1"
-    private let purchaseBudgetKey       = "chefpro_purchase_budget_v1"
-    private let expiryWarningDaysKey    = "chefpro_expiry_warning_days_v1"
+    private let purchaseBudgetKey           = "chefpro_purchase_budget_v1"
+    private let monthlyRevenuePlanKey       = "chefpro_monthly_revenue_plan_v1"
+    private let monthlyFoodCostTargetKey    = "chefpro_monthly_fc_target_v1"
+    private let expiryWarningDaysKey        = "chefpro_expiry_warning_days_v1"
     private let dailyDigestKey          = "chefpro_daily_digest_v1"
     private let haccpRemindersKey       = "chefpro_haccp_reminders_v1"
     private let haccpIntervalHoursKey   = "chefpro_haccp_interval_v1"
@@ -81,19 +97,64 @@ final class ChefProStore: ObservableObject {
     private let temperatureLogsKey    = "chefpro_temp_logs_v1"
     private let appLanguageKey        = "chefpro_app_language_v1"
     private let recipeVersionsKey     = "chefpro_recipe_versions_v1"
+    private let hasInitialDataKey     = "chefpro_has_initial_data_v1"
+    private let stockMovementsKey     = "chefpro_stock_movements_v1"
 
+    // MARK: - Data Version Migration
+    private let dataVersionKey    = "chefpro_data_version"
+    private let currentDataVersion = 2
+
+    // Prevents saveData() from firing during loadData() (every didSet would overwrite UserDefaults mid-load)
+    private var isLoading = false
     // Prevents upload from triggering when we are writing downloaded data to properties
     private var isSyncingFromCloud = false
     private var uploadTask: Task<Void, Never>?
 
     init() {
         loadData()
-        if employees.isEmpty { loadDemoEmployees() }
-        if dishes.isEmpty && inventoryItems.isEmpty { loadDemoData() }
+        migrateIfNeeded()
         lastSyncDate = UserDefaults.standard.object(forKey: lastSyncKey) as? Date
         if checklists.isEmpty { loadDefaultChecklists() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         Task { await syncFromCloud() }
+    }
+
+    // MARK: - Data Version Migration
+
+    private func migrateIfNeeded() {
+        let savedVersion = UserDefaults.standard.integer(forKey: dataVersionKey)
+        guard savedVersion < currentDataVersion else {
+            // Even on current version — sync any semifinished that have no inventory item yet
+            syncAllSemifinished()
+            return
+        }
+
+        if savedVersion == 0 || savedVersion == 1 {
+            saveData()
+        }
+
+        syncAllSemifinished()
+        UserDefaults.standard.set(currentDataVersion, forKey: dataVersionKey)
+    }
+
+    /// Ensures every semi-finished dish has a corresponding InventoryItem.
+    private func syncAllSemifinished() {
+        for dish in dishes where dish.dishType == .semifinished {
+            if !inventoryItems.contains(where: { $0.sourceDishID == dish.id }) {
+                syncSemifinishedInventoryItem(for: dish)
+            }
+        }
+    }
+
+    // MARK: - Error Logging
+
+    /// Logs a non-fatal error. In release builds this should forward to Crashlytics.
+    func logError(_ error: Error, context: String) {
+        #if !DEBUG
+        // TODO: Uncomment after adding FirebaseCrashlytics target (see CRASHLYTICS_SETUP.md):
+        // Crashlytics.crashlytics().record(error: error)
+        #endif
+        print("[\(context)] Error: \(error)")
     }
 
     var isLoggedIn: Bool {
@@ -107,6 +168,24 @@ final class ChefProStore: ObservableObject {
 
     var totalDeliverySum: Double {
         deliveries.reduce(0) { $0 + $1.price }
+    }
+
+    var currentMonthRevenue: Double {
+        let calendar = Calendar.current
+        let now = Date()
+        return shiftHistory
+            .filter { calendar.isDate($0.openedAt, equalTo: now, toGranularity: .month) }
+            .reduce(0) { $0 + $1.revenue }
+    }
+
+    var currentMonthAvgFoodCost: Double {
+        let calendar = Calendar.current
+        let now = Date()
+        let shifts = shiftHistory.filter {
+            calendar.isDate($0.openedAt, equalTo: now, toGranularity: .month) && $0.foodCostForShift > 0
+        }
+        guard !shifts.isEmpty else { return 0 }
+        return shifts.reduce(0) { $0 + $1.foodCostForShift } / Double(shifts.count)
     }
 
     var lowStockItems: [InventoryItem] {
@@ -225,9 +304,45 @@ final class ChefProStore: ObservableObject {
         currentShift = nil
     }
 
+    func closeShiftWithRevenue(cashRevenue: Double, cardRevenue: Double, guestsCount: Int) {
+        guard var shift = currentShift else { return }
+        shift.closedAt = Date()
+        let since = shift.openedAt
+        shift.productionsCount    = productions.filter { $0.date >= since }.count
+        shift.writeOffsCount      = writeOffs.filter { $0.date >= since }.count
+        shift.deliveriesCount     = deliveries.filter { $0.date >= since }.count
+        shift.totalProductionCost = productions.filter { $0.date >= since }.reduce(0) { $0 + $1.totalCost }
+        shift.totalDeliveryCost   = deliveries.filter { $0.date >= since }.reduce(0) { $0 + $1.price }
+        shift.cashRevenue  = cashRevenue
+        shift.cardRevenue  = cardRevenue
+        shift.revenue      = cashRevenue + cardRevenue
+        shift.guestsCount  = guestsCount
+        if shift.revenue > 0 {
+            shift.foodCostForShift = (shift.totalProductionCost / shift.revenue) * 100
+        }
+        shiftHistory.insert(shift, at: 0)
+        currentShift = nil
+    }
+
     // MARK: Photo Storage
+
+    private func resizeImage(_ data: Data, maxDimension: CGFloat = 1024) -> Data {
+        guard let image = UIImage(data: data) else { return data }
+        let size = image.size
+        guard size.width > maxDimension || size.height > maxDimension else {
+            // Already small enough, just compress
+            return image.jpegData(compressionQuality: 0.8) ?? data
+        }
+        let ratio = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+        return resized.jpegData(compressionQuality: 0.8) ?? data
+    }
+
     func saveDishPhoto(_ image: UIImage, for dish: Dish) {
-        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let rawData = image.jpegData(compressionQuality: 1.0) else { return }
+        let data = resizeImage(rawData)
         let filename = "dish_\(dish.id.uuidString).jpg"
         let url = FileManager.default.documentsURL.appendingPathComponent(filename)
         try? data.write(to: url, options: .atomic)
@@ -253,7 +368,8 @@ final class ChefProStore: ObservableObject {
 
     // MARK: Step Photo Storage
     func saveStepPhoto(_ image: UIImage, for step: CookingStep, in dish: Dish) {
-        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let rawData = image.jpegData(compressionQuality: 1.0) else { return }
+        let data = resizeImage(rawData)
         let filename = "step_\(step.id.uuidString).jpg"
         let url = FileManager.default.documentsURL.appendingPathComponent(filename)
         try? data.write(to: url, options: .atomic)
@@ -369,11 +485,55 @@ final class ChefProStore: ObservableObject {
         return url
     }
 
+    // MARK: iCloud Sync
+
+    private var iCloudURL: URL? {
+        FileManager.default.url(forUbiquityContainerIdentifier: nil)?
+            .appendingPathComponent("Documents")
+            .appendingPathComponent("chefpro_backup.json")
+    }
+
+    func syncToiCloud() {
+        guard let url = iCloudURL,
+              let backupURL = exportBackup() else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+        try? FileManager.default.copyItem(at: backupURL, to: url)
+        UserDefaults.standard.set(Date(), forKey: "icloud_last_sync")
+    }
+
+    func syncFromiCloud(completion: @escaping (Bool) -> Void) {
+        guard let url = iCloudURL,
+              FileManager.default.fileExists(atPath: url.path) else {
+            completion(false); return
+        }
+        DispatchQueue.global().async {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                do {
+                    try self.importBackup(from: url)
+                    UserDefaults.standard.set(Date(), forKey: "icloud_last_sync")
+                    completion(true)
+                } catch {
+                    self.logError(error, context: "importBackup/iCloud")
+                    completion(false)
+                }
+            }
+        }
+    }
+
     func importBackup(from url: URL) throws {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let backup = try decoder.decode(AppBackup.self, from: data)
+        // backup.version is available for future format migrations.
+        // Currently versions 1 and 2 share the same field layout;
+        // add version-specific transforms here when introducing breaking changes.
         isSyncingFromCloud = true
         restaurantName   = backup.restaurantName
         dishes           = backup.dishes
@@ -390,6 +550,7 @@ final class ChefProStore: ObservableObject {
         temperatureLogs  = backup.temperatureLogs
         shiftHistory     = backup.shiftHistory
         isSyncingFromCloud = false
+        hapticNotification(.success)
     }
 
     // MARK: Spotlight
@@ -479,6 +640,7 @@ final class ChefProStore: ObservableObject {
         dishes[idx].steps       = version.steps
         dishes[idx].salePrice   = version.salePrice
         dishes[idx].cookTime    = version.cookTime
+        haptic(.medium)
     }
 
     func shiftsForEmployee(_ employeeID: UUID, in period: DateInterval) -> [WorkShift] {
@@ -635,12 +797,22 @@ final class ChefProStore: ObservableObject {
 
     func calculateDishCost(_ dish: Dish) -> Double {
         dish.ingredients.reduce(0) { total, ingredient in
+            // 1. Check if ingredient is a semi-finished product (another dish)
+            if let semifinished = dishes.first(where: {
+                $0.dishType == .semifinished &&
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            }) {
+                let sfCost = calculateDishCost(semifinished)  // recursive call
+                let weight = semifinished.portionWeight > 0 ? semifinished.portionWeight : 1.0
+                let rawQty = ingredient.yieldFactor > 0 ? ingredient.quantity / ingredient.yieldFactor : ingredient.quantity
+                return total + (rawQty / weight) * sfCost
+            }
+            // 2. Otherwise look up inventory item
             guard let item = inventoryItems.first(where: {
                 $0.name.lowercased() == ingredient.productName.lowercased()
             }) else {
                 return total
             }
-
             let rawQty = ingredient.yieldFactor > 0 ? ingredient.quantity / ingredient.yieldFactor : ingredient.quantity
             let convertedQuantity = convert(quantity: rawQty, from: ingredient.unit, to: item.unit)
             return total + (convertedQuantity * item.pricePerUnit)
@@ -674,6 +846,7 @@ final class ChefProStore: ObservableObject {
     func produceDish(_ dish: Dish, portions: Int) -> Bool {
         guard portions >= 1 else { return false }
         guard canProduce(dish: dish, portions: portions) else {
+            hapticNotification(.error)
             return false
         }
 
@@ -687,6 +860,15 @@ final class ChefProStore: ObservableObject {
                 let item = inventoryItems[index]
                 let needed = convert(quantity: ingredient.quantity * Double(portions), from: ingredient.unit, to: item.unit)
                 inventoryItems[index].quantity -= needed
+
+                stockMovements.append(StockMovement(
+                    itemName: item.name,
+                    itemID: item.id,
+                    type: .production,
+                    quantity: needed,
+                    unit: item.unit,
+                    note: "Производство: \(dish.name) x\(portions)"
+                ))
 
                 let writeOff = WriteOff(
                     productName: item.name,
@@ -709,7 +891,17 @@ final class ChefProStore: ObservableObject {
         )
 
         productions.append(production)
+
+        // Если это полуфабрикат — добавить выход на склад
+        if dish.dishType == .semifinished && dish.portionWeight > 0 {
+            let produced = dish.portionWeight * Double(portions)
+            if let idx = inventoryItems.firstIndex(where: { $0.sourceDishID == dish.id }) {
+                inventoryItems[idx].quantity += produced
+            }
+        }
+
         checkLowStockAndNotify()
+        hapticNotification(.success)
         return true
     }
 
@@ -731,7 +923,18 @@ final class ChefProStore: ObservableObject {
     }
 
     func addDelivery(_ delivery: Delivery) {
+        haptic(.light)
         deliveries.append(delivery)
+
+        let movement = StockMovement(
+            itemName: delivery.productName,
+            type: .delivery,
+            quantity: delivery.quantity,
+            unit: delivery.unit,
+            date: delivery.date,
+            note: "От: \(delivery.supplier)"
+        )
+        stockMovements.append(movement)
 
         let deliveryPricePerUnit = delivery.quantity > 0 ? delivery.price / delivery.quantity : 0
 
@@ -754,7 +957,7 @@ final class ChefProStore: ObservableObject {
         } else {
             var newItem = InventoryItem(
                 name: delivery.productName,
-                category: "Без категории",
+                category: delivery.category.isEmpty ? "Без категории" : delivery.category,
                 quantity: delivery.quantity,
                 unit: delivery.unit,
                 minQuantity: 1,
@@ -768,7 +971,18 @@ final class ChefProStore: ObservableObject {
     }
 
     func addWriteOff(_ writeOff: WriteOff) {
+        haptic(.medium)
         writeOffs.append(writeOff)
+
+        let movement = StockMovement(
+            itemName: writeOff.productName,
+            type: .writeOff,
+            quantity: writeOff.quantity,
+            unit: writeOff.unit,
+            date: writeOff.date,
+            note: writeOff.reason
+        )
+        stockMovements.append(movement)
 
         if let index = inventoryItems.firstIndex(where: {
             $0.name.lowercased() == writeOff.productName.lowercased() && $0.unit == writeOff.unit
@@ -779,14 +993,72 @@ final class ChefProStore: ObservableObject {
         checkLowStockAndNotify()
     }
 
-    func updateDish(_ updatedDish: Dish) {
-        if let index = dishes.firstIndex(where: { $0.id == updatedDish.id }) {
-            dishes[index] = updatedDish
+    // MARK: Haptics
+
+    private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
+    }
+
+    private func hapticNotification(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        UINotificationFeedbackGenerator().notificationOccurred(type)
+    }
+
+    func addDish(_ dish: Dish) {
+        dishes.append(dish)
+        if dish.dishType == .semifinished {
+            syncSemifinishedInventoryItem(for: dish)
         }
+        haptic(.medium)
+    }
+
+    func updateDish(_ updatedDish: Dish) {
+        guard let index = dishes.firstIndex(where: { $0.id == updatedDish.id }) else { return }
+        let oldDish = dishes[index]
+        dishes[index] = updatedDish
+
+        if updatedDish.dishType == .semifinished {
+            // Create or update the inventory item
+            syncSemifinishedInventoryItem(for: updatedDish)
+        } else if oldDish.dishType == .semifinished {
+            // Was semifinished, now changed to dish — remove from inventory
+            inventoryItems.removeAll { $0.sourceDishID == updatedDish.id }
+        }
+        haptic(.medium)
     }
 
     func deleteDish(_ dish: Dish) {
         dishes.removeAll { $0.id == dish.id }
+        if dish.dishType == .semifinished {
+            inventoryItems.removeAll { $0.sourceDishID == dish.id }
+        }
+        haptic(.heavy)
+    }
+
+    /// Creates or updates the InventoryItem linked to a semi-finished dish.
+    private func syncSemifinishedInventoryItem(for dish: Dish) {
+        let unit = dish.portionWeightUnit.isEmpty ? "г" : dish.portionWeightUnit
+        let costPerUnit = dish.portionWeight > 0
+            ? calculateDishCost(dish) / dish.portionWeight
+            : calculateDishCost(dish)
+
+        if let idx = inventoryItems.firstIndex(where: { $0.sourceDishID == dish.id }) {
+            // Update existing
+            inventoryItems[idx].name = dish.name
+            inventoryItems[idx].unit = unit
+            inventoryItems[idx].pricePerUnit = costPerUnit
+        } else {
+            // Create new
+            let item = InventoryItem(
+                name: dish.name,
+                category: "Полуфабрикаты",
+                quantity: 0,
+                unit: unit,
+                minQuantity: 0,
+                pricePerUnit: costPerUnit,
+                sourceDishID: dish.id
+            )
+            inventoryItems.append(item)
+        }
     }
 
     func updateInventoryItem(_ updatedItem: InventoryItem) {
@@ -824,6 +1096,133 @@ final class ChefProStore: ObservableObject {
             Employee(name: "Олег Иванов", position: "Кладовщик", phone: "+47 222 22 222", pin: "3333", permissions: ["Склад", "Приемка", "Списания"]),
             Employee(name: "Мария Кузнецова", position: "Администратор", phone: "+47 333 33 333", pin: "4444", permissions: ["Отчеты", "Настройки"])
         ]
+    }
+
+    /// Public method to load comprehensive demo data if store is empty.
+    func populateDemoData() {
+        guard dishes.isEmpty && inventoryItems.isEmpty else { return }
+        loadExtendedDemoData()
+    }
+
+    private func loadExtendedDemoData() {
+        inventoryItems = [
+            InventoryItem(name: "Мука", category: "Бакалея", quantity: 10, unit: "кг", minQuantity: 3, pricePerUnit: 1.2),
+            InventoryItem(name: "Молоко", category: "Молочные продукты", quantity: 8, unit: "л", minQuantity: 2, pricePerUnit: 1.5),
+            InventoryItem(name: "Яйца", category: "Молочные продукты", quantity: 30, unit: "шт", minQuantity: 12, pricePerUnit: 0.4),
+            InventoryItem(name: "Масло сливочное", category: "Молочные продукты", quantity: 2, unit: "кг", minQuantity: 0.5, pricePerUnit: 12.0),
+            InventoryItem(name: "Говядина", category: "Мясо", quantity: 5, unit: "кг", minQuantity: 2, pricePerUnit: 22.0),
+            InventoryItem(name: "Помидоры", category: "Овощи", quantity: 4, unit: "кг", minQuantity: 1, pricePerUnit: 2.5),
+            InventoryItem(name: "Сыр", category: "Молочные продукты", quantity: 2, unit: "кг", minQuantity: 0.5, pricePerUnit: 9.5),
+            InventoryItem(name: "Сахар", category: "Бакалея", quantity: 5, unit: "кг", minQuantity: 1, pricePerUnit: 1.0),
+            InventoryItem(name: "Рис", category: "Бакалея", quantity: 12, unit: "кг", minQuantity: 5, pricePerUnit: 2.2),
+            InventoryItem(name: "Лосось", category: "Рыба", quantity: 4, unit: "кг", minQuantity: 3, pricePerUnit: 18.5),
+            InventoryItem(name: "Курица", category: "Мясо", quantity: 8, unit: "кг", minQuantity: 5, pricePerUnit: 6.8),
+            InventoryItem(name: "Нори", category: "Суши", quantity: 50, unit: "шт", minQuantity: 10, pricePerUnit: 0.25),
+            InventoryItem(name: "Салат", category: "Овощи", quantity: 6, unit: "кг", minQuantity: 2, pricePerUnit: 3.1),
+            InventoryItem(name: "Соус", category: "Соусы", quantity: 3, unit: "кг", minQuantity: 1, pricePerUnit: 5.4),
+            InventoryItem(name: "Маскарпоне", category: "Молочные продукты", quantity: 1.5, unit: "кг", minQuantity: 0.5, pricePerUnit: 14.0),
+            InventoryItem(name: "Кофе эспрессо", category: "Напитки", quantity: 1, unit: "л", minQuantity: 0.3, pricePerUnit: 6.0),
+            InventoryItem(name: "Тесто для пиццы", category: "Бакалея", quantity: 3, unit: "кг", minQuantity: 1, pricePerUnit: 4.0)
+        ]
+
+        dishes = [
+            Dish(
+                name: "Борщ",
+                category: "Супы",
+                salePrice: 8.90,
+                ingredients: [
+                    RecipeIngredient(productName: "Говядина", quantity: 200, unit: "г"),
+                    RecipeIngredient(productName: "Помидоры", quantity: 100, unit: "г"),
+                    RecipeIngredient(productName: "Масло сливочное", quantity: 20, unit: "г")
+                ],
+                cookTime: 90
+            ),
+            Dish(
+                name: "Пицца Маргарита",
+                category: "Пицца",
+                salePrice: 13.50,
+                ingredients: [
+                    RecipeIngredient(productName: "Тесто для пиццы", quantity: 250, unit: "г"),
+                    RecipeIngredient(productName: "Помидоры", quantity: 150, unit: "г"),
+                    RecipeIngredient(productName: "Сыр", quantity: 100, unit: "г")
+                ],
+                cookTime: 20
+            ),
+            Dish(
+                name: "Тирамису",
+                category: "Десерты",
+                salePrice: 9.90,
+                ingredients: [
+                    RecipeIngredient(productName: "Маскарпоне", quantity: 250, unit: "г"),
+                    RecipeIngredient(productName: "Яйца", quantity: 3, unit: "шт"),
+                    RecipeIngredient(productName: "Сахар", quantity: 80, unit: "г"),
+                    RecipeIngredient(productName: "Кофе эспрессо", quantity: 100, unit: "мл")
+                ],
+                cookTime: 30
+            ),
+            Dish(
+                name: "Стейк Рибай",
+                category: "Горячее",
+                salePrice: 32.00,
+                ingredients: [
+                    RecipeIngredient(productName: "Говядина", quantity: 350, unit: "г"),
+                    RecipeIngredient(productName: "Масло сливочное", quantity: 30, unit: "г")
+                ],
+                cookTime: 15
+            ),
+            Dish(
+                name: "Паста Карбонара",
+                category: "Паста",
+                salePrice: 14.90,
+                ingredients: [
+                    RecipeIngredient(productName: "Яйца", quantity: 2, unit: "шт"),
+                    RecipeIngredient(productName: "Сыр", quantity: 60, unit: "г"),
+                    RecipeIngredient(productName: "Масло сливочное", quantity: 20, unit: "г")
+                ],
+                cookTime: 20
+            ),
+            Dish(
+                name: "Филадельфия ролл",
+                category: "Суши",
+                salePrice: 14.90,
+                ingredients: [
+                    RecipeIngredient(productName: "Рис", quantity: 120, unit: "г"),
+                    RecipeIngredient(productName: "Лосось", quantity: 60, unit: "г"),
+                    RecipeIngredient(productName: "Сыр", quantity: 35, unit: "г"),
+                    RecipeIngredient(productName: "Нори", quantity: 1, unit: "шт")
+                ]
+            ),
+            Dish(
+                name: "Цезарь с курицей",
+                category: "Салаты",
+                salePrice: 12.50,
+                ingredients: [
+                    RecipeIngredient(productName: "Курица", quantity: 120, unit: "г"),
+                    RecipeIngredient(productName: "Салат", quantity: 80, unit: "г"),
+                    RecipeIngredient(productName: "Соус", quantity: 40, unit: "г"),
+                    RecipeIngredient(productName: "Сыр", quantity: 20, unit: "г")
+                ]
+            )
+        ]
+
+        suppliers = [
+            Supplier(name: "ООО Продукты", phone: "+7 800 555 0101", email: "info@ooo-produkty.ru", notes: "Основной поставщик сухих продуктов"),
+            Supplier(name: "ИП Молочник", phone: "+7 800 555 0202", email: "molochnik@mail.ru", notes: "Молочная продукция и яйца")
+        ]
+
+        if employees.isEmpty {
+            employees = [
+                Employee(name: "Иван Иванов", position: "Шеф-повар", phone: "+7 900 000 0001", pin: "1111",
+                         permissions: ["Техкарты", "Склад", "Приемка", "Списания", "Отчеты", "Настройки"])
+            ]
+        }
+
+        deliveries = [
+            Delivery(supplier: "ООО Продукты", productName: "Мука", quantity: 10, unit: "кг", price: 12.0, date: Date(), acceptedBy: "Иван Иванов")
+        ]
+
+        writeOffs = []
+        productions = []
     }
 
     private func loadDemoData() {
@@ -871,6 +1270,7 @@ final class ChefProStore: ObservableObject {
     }
 
     private func saveData() {
+        guard !isLoading else { return }
         save(dishes, key: dishesKey)
         save(inventoryItems, key: inventoryKey)
         save(deliveries, key: deliveriesKey)
@@ -887,6 +1287,8 @@ final class ChefProStore: ObservableObject {
         save(currentProductionPlan, key: productionPlanKey)
         UserDefaults.standard.set(foodCostThreshold,    forKey: foodCostThresholdKey)
         UserDefaults.standard.set(purchaseBudget,       forKey: purchaseBudgetKey)
+        UserDefaults.standard.set(monthlyRevenuePlan,   forKey: monthlyRevenuePlanKey)
+        UserDefaults.standard.set(monthlyFoodCostTarget, forKey: monthlyFoodCostTargetKey)
         UserDefaults.standard.set(expiryWarningDays,    forKey: expiryWarningDaysKey)
         UserDefaults.standard.set(dailyDigestEnabled,   forKey: dailyDigestKey)
         UserDefaults.standard.set(haccpRemindersEnabled, forKey: haccpRemindersKey)
@@ -907,18 +1309,20 @@ final class ChefProStore: ObservableObject {
         save(workSchedule, key: workScheduleKey)
         save(temperatureLogs, key: temperatureLogsKey)
         save(recipeVersions, key: recipeVersionsKey)
+        save(stockMovements, key: stockMovementsKey)
         UserDefaults.standard.set(appLanguage.rawValue, forKey: appLanguageKey)
         writeWidgetSharedData()
         indexSpotlight()
         checkLowStockAndNotify()
         scheduleUpload()
+        syncToiCloud()
     }
 
     // MARK: - Widget Shared Data
 
     /// Writes summary data to the shared App Group UserDefaults so the widget extension can read it.
     private func writeWidgetSharedData() {
-        guard let sharedDefaults = UserDefaults(suiteName: "group.com.chefpro.app") else { return }
+        guard let sharedDefaults = UserDefaults(suiteName: "group.ChefPro") else { return }
 
         // Average food cost across all active dishes with a non-zero sale price
         let activeDishes = dishes.filter { $0.salePrice > 0 }
@@ -971,6 +1375,7 @@ final class ChefProStore: ObservableObject {
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {
             syncError = error.localizedDescription
+            logError(error, context: "syncToCloud")
         }
         isSyncing = false
     }
@@ -994,12 +1399,15 @@ final class ChefProStore: ObservableObject {
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {
             syncError = error.localizedDescription
+            logError(error, context: "syncFromCloud")
         }
         isSyncingFromCloud = false
         isSyncing = false
     }
 
     private func loadData() {
+        isLoading = true
+        defer { isLoading = false }
         dishes = load([Dish].self, key: dishesKey) ?? []
         inventoryItems = load([InventoryItem].self, key: inventoryKey) ?? []
         deliveries = load([Delivery].self, key: deliveriesKey) ?? []
@@ -1017,6 +1425,9 @@ final class ChefProStore: ObservableObject {
         let storedThreshold = UserDefaults.standard.double(forKey: foodCostThresholdKey)
         foodCostThreshold   = storedThreshold > 0 ? storedThreshold : 35
         purchaseBudget      = UserDefaults.standard.double(forKey: purchaseBudgetKey)
+        monthlyRevenuePlan  = UserDefaults.standard.double(forKey: monthlyRevenuePlanKey)
+        let fc = UserDefaults.standard.double(forKey: monthlyFoodCostTargetKey)
+        monthlyFoodCostTarget = fc > 0 ? fc : 30
         let storedDays      = UserDefaults.standard.integer(forKey: expiryWarningDaysKey)
         expiryWarningDays   = storedDays > 0 ? storedDays : 3
         dailyDigestEnabled  = UserDefaults.standard.bool(forKey: dailyDigestKey)
@@ -1034,6 +1445,7 @@ final class ChefProStore: ObservableObject {
         workSchedule    = load([WorkShift].self, key: workScheduleKey) ?? []
         temperatureLogs = load([TemperatureLog].self, key: temperatureLogsKey) ?? []
         recipeVersions  = load([RecipeVersion].self, key: recipeVersionsKey) ?? []
+        stockMovements  = load([StockMovement].self, key: stockMovementsKey) ?? []
         if let raw = UserDefaults.standard.string(forKey: appLanguageKey),
            let lang = AppLanguage(rawValue: raw) { appLanguage = lang }
         if let idString = UserDefaults.standard.string(forKey: currentEmployeeIDKey) {

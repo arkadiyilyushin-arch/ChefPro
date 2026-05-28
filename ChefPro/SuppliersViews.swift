@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Suppliers
 
@@ -53,6 +54,7 @@ struct SupplierDetailView: View {
     @EnvironmentObject var store: ChefProStore
     let supplier: Supplier
     @State private var showEdit = false
+    @State private var showOrder = false
 
     private var deliveries: [Delivery] {
         store.deliveries.filter { $0.supplier == supplier.name }.sorted { $0.date > $1.date }
@@ -70,6 +72,34 @@ struct SupplierDetailView: View {
                         if !supplier.notes.isEmpty { Text(supplier.notes).font(.caption).foregroundStyle(.secondary) }
                     }
                 }
+
+                // Contact action buttons
+                HStack(spacing: 12) {
+                    if !supplier.phone.isEmpty,
+                       let callURL = URL(string: "tel:\(supplier.phone.replacingOccurrences(of: " ", with: ""))") {
+                        Link(destination: callURL) {
+                            Label("Позвонить", systemImage: "phone.fill")
+                                .font(.subheadline.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color.green.opacity(0.15))
+                                .foregroundStyle(.green)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                    Button {
+                        showOrder = true
+                    } label: {
+                        Label("Заказать", systemImage: "cart.badge.plus")
+                            .font(.subheadline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.chefAccent.opacity(0.15))
+                            .foregroundStyle(.chefAccent)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .padding(.horizontal, 4)
 
                 HStack {
                     InfoCard(title: "Приёмок", value: "\(deliveries.count)", subtitle: "всего", icon: "tray.fill")
@@ -106,6 +136,9 @@ struct SupplierDetailView: View {
         }
         .sheet(isPresented: $showEdit) {
             AddEditSupplierView(supplier: supplier).environmentObject(store)
+        }
+        .sheet(isPresented: $showOrder) {
+            SupplierOrderComposeView(supplier: supplier).environmentObject(store)
         }
     }
 }
@@ -178,6 +211,7 @@ struct SupplierAutoOrderView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showShareSheet = false
     @State private var orderText = ""
+    @State private var copiedToClipboard = false
 
     struct OrderLine: Identifiable {
         let id: UUID
@@ -203,16 +237,38 @@ struct SupplierAutoOrderView: View {
     }
 
     private func buildOrderText() -> String {
-        var lines = ["ЗАЯВКА НА ЗАКУПКУ", "Дата: \(Date().formatted(date: .abbreviated, time: .shortened))", "Ресторан: \(store.restaurantName)", ""]
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ru_RU")
+        df.dateFormat = "d MMMM yyyy"
+        var lines: [String] = [
+            "ЗАЯВКА НА ПОСТАВКУ",
+            "Дата: \(df.string(from: Date()))",
+            "Ресторан: \(store.restaurantName)",
+            ""
+        ]
         for (supplier, items) in grouped {
             lines.append("═══ \(supplier) ═══")
+            lines.append("Товар | Кол-во | Ед.")
             for line in items {
-                lines.append("• \(line.item.name): \(String(format: "%.1f", line.needed)) \(line.item.effectiveOrderUnit)")
+                lines.append("• \(line.item.name) | \(String(format: "%.1f", line.needed)) | \(line.item.effectiveOrderUnit)")
             }
             lines.append("")
         }
         lines.append("Ответственный: \(store.profile.name)")
         return lines.joined(separator: "\n")
+    }
+
+    private func shareViaWhatsApp(text: String) {
+        let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "whatsapp://send?text=\(encoded)") {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            } else {
+                UIPasteboard.general.string = text
+                copiedToClipboard = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToClipboard = false }
+            }
+        }
     }
 
     var body: some View {
@@ -228,11 +284,52 @@ struct SupplierAutoOrderView: View {
                         SupplierOrderSection(supplier: supplier, lines: lines,
                                             emailBody: buildOrderText())
                     }
-                    BigActionButton(title: "Поделиться заявкой", icon: "square.and.arrow.up") {
-                        orderText = buildOrderText()
-                        showShareSheet = true
+
+                    // Share buttons row
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            Button {
+                                shareViaWhatsApp(text: buildOrderText())
+                            } label: {
+                                Label("WhatsApp", systemImage: "message.fill")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.green)
+                                    .foregroundStyle(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+
+                            Button {
+                                orderText = buildOrderText()
+                                showShareSheet = true
+                            } label: {
+                                Label("Email", systemImage: "envelope.fill")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.blue)
+                                    .foregroundStyle(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+
+                        Button {
+                            UIPasteboard.general.string = buildOrderText()
+                            copiedToClipboard = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToClipboard = false }
+                        } label: {
+                            Label(copiedToClipboard ? "Скопировано!" : "Скопировать", systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
+                                .font(.subheadline.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color(.systemGray5))
+                                .foregroundStyle(.primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
                     }
                     .padding(.horizontal)
+                    .padding(.bottom, 8)
                 }
             }
             .padding(.vertical)
@@ -267,20 +364,83 @@ struct SupplierOrderSection: View {
     let supplier: String
     let lines: [SupplierAutoOrderView.OrderLine]
     let emailBody: String
+    @State private var copiedSection = false
+
+    private var supplierRecord: Supplier? {
+        store.suppliers.first(where: { $0.name == supplier })
+    }
+
+    private func supplierOrderText() -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ru_RU")
+        df.dateFormat = "d MMMM yyyy"
+        var result = "ЗАЯВКА НА ПОСТАВКУ\nДата: \(df.string(from: Date()))\nРесторан: \(store.restaurantName)\nПоставщик: \(supplier)\n\nТовар | Кол-во | Ед.\n"
+        for line in lines {
+            result += "• \(line.item.name) | \(String(format: "%.1f", line.needed)) | \(line.item.effectiveOrderUnit)\n"
+        }
+        return result
+    }
+
+    private func shareViaWhatsApp() {
+        let text = supplierOrderText()
+        let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "whatsapp://send?text=\(encoded)") {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            } else {
+                UIPasteboard.general.string = text
+                copiedSection = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedSection = false }
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(supplier).font(.headline).padding(.horizontal)
                 Spacer()
-                if let sup = store.suppliers.first(where: { $0.name == supplier }),
-                   !sup.email.isEmpty,
-                   let url = URL(string: "mailto:\(sup.email)?subject=Заявка&body=\(emailBody.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
-                    Link(destination: url) {
-                        Label("Email", systemImage: "envelope").font(.caption)
+                // Per-supplier share buttons
+                HStack(spacing: 8) {
+                    // WhatsApp
+                    Button { shareViaWhatsApp() } label: {
+                        Image(systemName: "message.fill")
+                            .font(.caption)
+                            .padding(6)
+                            .background(Color.green.opacity(0.15))
+                            .foregroundStyle(.green)
+                            .clipShape(Circle())
                     }
-                    .padding(.trailing)
+
+                    // Email
+                    if let sup = supplierRecord, !sup.email.isEmpty,
+                       let subjectEncoded = "Заявка на поставку".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                       let bodyEncoded = supplierOrderText().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                       let url = URL(string: "mailto:\(sup.email)?subject=\(subjectEncoded)&body=\(bodyEncoded)") {
+                        Link(destination: url) {
+                            Image(systemName: "envelope.fill")
+                                .font(.caption)
+                                .padding(6)
+                                .background(Color.blue.opacity(0.15))
+                                .foregroundStyle(.blue)
+                                .clipShape(Circle())
+                        }
+                    }
+
+                    // Phone
+                    if let sup = supplierRecord, !sup.phone.isEmpty,
+                       let phoneURL = URL(string: "tel:\(sup.phone.replacingOccurrences(of: " ", with: ""))") {
+                        Link(destination: phoneURL) {
+                            Image(systemName: "phone.fill")
+                                .font(.caption)
+                                .padding(6)
+                                .background(Color.green.opacity(0.1))
+                                .foregroundStyle(.green)
+                                .clipShape(Circle())
+                        }
+                    }
                 }
+                .padding(.trailing)
             }
             ForEach(lines) { line in
                 OrderLineRow(line: line)
@@ -314,5 +474,167 @@ struct OrderLineRow: View {
             }
         }
         .padding(.horizontal)
+    }
+}
+
+// MARK: - Supplier Order Compose (from SupplierDetailView)
+
+struct SupplierOrderComposeView: View {
+    @EnvironmentObject var store: ChefProStore
+    @Environment(\.dismiss) private var dismiss
+    let supplier: Supplier
+
+    @State private var copiedToClipboard = false
+
+    // Items for this supplier (low-stock items linked to this supplier, or all purchase-list items)
+    private var relevantItems: [InventoryItem] {
+        let linked = store.inventoryItems.filter { item in
+            item.name.localizedCaseInsensitiveContains(supplier.name) ||
+            supplier.name.localizedCaseInsensitiveContains(item.name)
+        }
+        if !linked.isEmpty { return linked }
+        return store.purchaseList
+    }
+
+    private func buildOrderText() -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ru_RU")
+        df.dateFormat = "d MMMM yyyy"
+        var lines: [String] = [
+            "ЗАЯВКА НА ПОСТАВКУ",
+            "Дата: \(df.string(from: Date()))",
+            "Ресторан: \(store.restaurantName)",
+            "Поставщик: \(supplier.name)",
+            "",
+            "Товар | Кол-во | Ед."
+        ]
+        for item in relevantItems {
+            let needed = max(item.minQuantity - item.quantity, 0)
+            lines.append("• \(item.name) | \(String(format: "%.1f", needed)) | \(item.effectiveOrderUnit)")
+        }
+        lines.append("\nОтветственный: \(store.profile.name)")
+        return lines.joined(separator: "\n")
+    }
+
+    private func shareViaWhatsApp() {
+        let text = buildOrderText()
+        let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "whatsapp://send?text=\(encoded)") {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            } else {
+                UIPasteboard.general.string = text
+                copiedToClipboard = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToClipboard = false }
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Order text preview
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Текст заявки", systemImage: "doc.text").font(.headline)
+                            Divider()
+                            Text(buildOrderText())
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+
+                    // Items list
+                    if relevantItems.isEmpty {
+                        EmptyStateView(icon: "cart", title: "Нет товаров для заказа",
+                                       subtitle: "Добавьте позиции на склад и свяжите их с поставщиком.")
+                    } else {
+                        SectionTitle(title: "Позиции (\(relevantItems.count))")
+                        ForEach(relevantItems) { item in
+                            BigCard {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.name).font(.subheadline.bold())
+                                        Text("Остаток: \(item.quantity, specifier: "%.1f") \(item.unit)")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        let needed = max(item.minQuantity - item.quantity, 0)
+                                        Text("\(needed, specifier: "%.1f") \(item.effectiveOrderUnit)")
+                                            .font(.subheadline.bold()).foregroundStyle(.chefAccent)
+                                        Text("к заказу").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Share buttons
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            Button { shareViaWhatsApp() } label: {
+                                Label("WhatsApp", systemImage: "message.fill")
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.green)
+                                    .foregroundStyle(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+
+                            if !supplier.email.isEmpty,
+                               let subjectEncoded = "Заявка на поставку".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                               let bodyEncoded = buildOrderText().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                               let url = URL(string: "mailto:\(supplier.email)?subject=\(subjectEncoded)&body=\(bodyEncoded)") {
+                                Link(destination: url) {
+                                    Label("Email", systemImage: "envelope.fill")
+                                        .font(.subheadline.bold())
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.blue)
+                                        .foregroundStyle(.white)
+                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                            } else {
+                                Label("Email не задан", systemImage: "envelope")
+                                    .font(.subheadline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color(.systemGray5))
+                                    .foregroundStyle(.secondary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+
+                        Button {
+                            UIPasteboard.general.string = buildOrderText()
+                            copiedToClipboard = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToClipboard = false }
+                        } label: {
+                            Label(copiedToClipboard ? "Скопировано!" : "Скопировать заявку",
+                                  systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
+                                .font(.subheadline.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color(.systemGray5))
+                                .foregroundStyle(.primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                    .padding(.bottom, 8)
+                }
+                .padding()
+            }
+            .background(Color.chefBackground)
+            .navigationTitle("Заявка — \(supplier.name)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { dismiss() }
+                }
+            }
+        }
     }
 }

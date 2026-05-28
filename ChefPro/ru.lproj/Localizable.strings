@@ -1,0 +1,58 @@
+/* Tab bar */
+"tab.dashboard" = "Главная";
+"tab.techcards" = "Техкарты";
+"tab.inventory" = "Склад";
+"tab.deliveries" = "Приемка";
+"tab.more" = "Ещё";
+
+/* Dashboard */
+"dashboard.greeting.morning" = "Доброе утро";
+"dashboard.greeting.afternoon" = "Добрый день";
+"dashboard.greeting.evening" = "Добрый вечер";
+"dashboard.low_stock" = "Нужно заказать";
+"dashboard.high_food_cost" = "Высокий Food Cost";
+
+/* Common */
+"common.save" = "Сохранить";
+"common.cancel" = "Отмена";
+"common.delete" = "Удалить";
+"common.add" = "Добавить";
+"common.edit" = "Редактировать";
+"common.search" = "Поиск";
+
+/* Inventory */
+"inventory.title" = "Склад";
+"inventory.low_stock" = "Заканчивается";
+"inventory.expiring" = "Срок годности";
+"inventory.add_item" = "Добавить товар";
+
+/* Deliveries */
+"deliveries.title" = "Приемка";
+"deliveries.new" = "Новая приемка";
+"deliveries.supplier" = "Поставщик";
+"deliveries.product" = "Товар";
+"deliveries.quantity" = "Количество";
+"deliveries.price" = "Сумма";
+
+/* Tech cards */
+"techcards.title" = "Техкарты";
+"techcards.cost" = "Себестоимость";
+"techcards.foodcost" = "Food Cost";
+"techcards.ingredients" = "Ингредиенты";
+"techcards.steps" = "Шаги";
+"techcards.allergens" = "Аллергены";
+
+/* Staff */
+"staff.title" = "Персонал";
+"staff.shift_open" = "Смена открыта";
+"staff.shift_closed" = "Смена закрыта";
+"staff.open_shift" = "Открыть смену";
+"staff.close_shift" = "Закрыть смену";
+
+/* Settings */
+"settings.title" = "Настройки";
+"settings.language" = "Язык";
+"settings.theme" = "Тема";
+"settings.notifications" = "Уведомления";
+"settings.food_cost_threshold" = "Порог Food Cost";
+"settings.restaurant_name" = "Название заведения";

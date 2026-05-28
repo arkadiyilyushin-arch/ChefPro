@@ -1,5 +1,15 @@
 import SwiftUI
 import PhotosUI
+import UIKit
+
+// MARK: - Dish Sort Order
+
+enum DishSortOrder: String, CaseIterable {
+    case name     = "Название"
+    case foodCost = "Себестоимость"
+    case price    = "Цена продажи"
+    case margin   = "Маржа"
+}
 
 // MARK: - Tech Cards
 
@@ -66,16 +76,19 @@ struct DishRowCard: View {
 struct TechCardsView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showAddDish = false
+    @State private var showScanner = false
     @State private var searchText = ""
     @State private var selectedCategory = "Все"
     @State private var selectedStatus: DishMenuStatus? = nil
+    @State private var dishSortOrder: DishSortOrder = .name
+    @State private var selectedType: DishType = .dish
 
     var categories: [String] {
         ["Все"] + store.dishCategories
     }
 
     var filteredDishes: [Dish] {
-        let base = store.dishes.filter { dish in
+        var base = store.dishes.filter { dish in
             let ingredientNames = dish.ingredients.map { $0.productName }.joined(separator: " ")
             let matchesSearch = searchText.isEmpty ||
             dish.name.localizedCaseInsensitiveContains(searchText) ||
@@ -83,47 +96,86 @@ struct TechCardsView: View {
             ingredientNames.localizedCaseInsensitiveContains(searchText)
             let matchesCategory = selectedCategory == "Все" || dish.category == selectedCategory
             let matchesStatus = selectedStatus == nil || dish.menuStatus == selectedStatus
-            return matchesSearch && matchesCategory && matchesStatus
+            let matchesType = dish.dishType == selectedType
+            return matchesSearch && matchesCategory && matchesStatus && matchesType
+        }
+        // Favorites first unless sorted otherwise
+        switch dishSortOrder {
+        case .name:
+            base.sort { $0.name < $1.name }
+        case .foodCost:
+            base.sort { store.calculateDishCost($0) < store.calculateDishCost($1) }
+        case .price:
+            base.sort { $0.salePrice > $1.salePrice }
+        case .margin:
+            base.sort {
+                let m0 = $0.salePrice - store.calculateDishCost($0)
+                let m1 = $1.salePrice - store.calculateDishCost($1)
+                return m0 > m1
+            }
         }
         return base.sorted { $0.isFavorite && !$1.isFavorite }
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(categories, id: \.self) { cat in
-                                Button { selectedCategory = cat } label: {
-                                    Text(cat)
-                                        .font(.subheadline.weight(.medium))
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
-                                        .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                            Divider().frame(height: 24)
-                            ForEach(DishMenuStatus.allCases, id: \.self) { status in
-                                Button {
-                                    selectedStatus = selectedStatus == status ? nil : status
-                                } label: {
-                                    Label(status.rawValue, systemImage: status.icon)
-                                        .font(.subheadline.weight(.medium))
-                                        .padding(.horizontal, 14).padding(.vertical, 8)
-                                        .background(selectedStatus == status ? status.color : Color(.systemGray5))
-                                        .foregroundStyle(selectedStatus == status ? Color.white : Color.primary)
-                                        .clipShape(Capsule())
-                                }
+            VStack(spacing: 0) {
+                // MARK: Type Picker
+                Picker("Тип", selection: $selectedType) {
+                    ForEach(DishType.allCases, id: \.self) { t in
+                        Label(t.rawValue, systemImage: t.icon).tag(t)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(categories, id: \.self) { cat in
+                            Button { selectedCategory = cat } label: {
+                                Text(cat)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
+                                    .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
+                                    .clipShape(Capsule())
                             }
                         }
-                        .padding(.horizontal)
+                        Divider().frame(height: 24)
+                        ForEach(DishMenuStatus.allCases, id: \.self) { status in
+                            Button {
+                                selectedStatus = selectedStatus == status ? nil : status
+                            } label: {
+                                Label(status.rawValue, systemImage: status.icon)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(selectedStatus == status ? status.color : Color(.systemGray5))
+                                    .foregroundStyle(selectedStatus == status ? Color.white : Color.primary)
+                                    .clipShape(Capsule())
+                            }
+                        }
                     }
+                    .padding(.horizontal)
+                }
+                .padding(.vertical, 8)
 
-                    if filteredDishes.isEmpty {
-                        EmptyStateView(icon: "book.closed", title: "Ничего не найдено", subtitle: "Попробуй изменить поиск или категорию.")
+                if filteredDishes.isEmpty {
+                    if store.dishes.isEmpty {
+                        EmptyStateView(
+                            icon: "fork.knife",
+                            title: "Нет техкарт",
+                            subtitle: "Добавьте первое блюдо чтобы начать",
+                            actionTitle: "Добавить блюдо",
+                            action: { showAddDish = true }
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
+                        EmptyStateView(icon: "book.closed", title: "Ничего не найдено", subtitle: "Попробуй изменить поиск или категорию.")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    List {
                         ForEach(filteredDishes) { dish in
                             NavigationLink {
                                 DishDetailView(dish: dish)
@@ -136,24 +188,82 @@ struct TechCardsView: View {
                                     threshold: store.foodCostThreshold
                                 )
                             }
-                            .buttonStyle(.plain)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    let deletedDish = dish
+                                    store.deleteDish(dish)
+                                    withAnimation {
+                                        store.undoItem = UndoableItem(
+                                            type: .dish,
+                                            description: deletedDish.name
+                                        ) {
+                                            store.dishes.append(deletedDish)
+                                        }
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                                        if store.undoItem?.description == deletedDish.name {
+                                            withAnimation { store.undoItem = nil }
+                                        }
+                                    }
+                                } label: { Label("Удалить", systemImage: "trash") }
+                            }
                         }
                     }
+                    .listStyle(.plain)
+                    .background(Color.chefBackground)
                 }
-                .padding(.vertical)
             }
             .background(Color.chefBackground)
             .searchable(text: $searchText, prompt: "Поиск блюда или ингредиента")
             .navigationTitle("Техкарты")
             .toolbar {
-                Button { showAddDish = true } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        ForEach(DishSortOrder.allCases, id: \.self) { order in
+                            Button {
+                                dishSortOrder = order
+                            } label: {
+                                HStack {
+                                    Text(order.rawValue)
+                                    if dishSortOrder == order {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Сортировка", systemImage: "arrow.up.arrow.down")
+                            .font(.subheadline)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 14) {
+                        Button {
+                            showScanner = true
+                        } label: {
+                            Image(systemName: "text.viewfinder")
+                                .font(.title3)
+                        }
+                        Button { showAddDish = true } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showAddDish) {
-                AddDishView { store.dishes.append($0) }
+                AddDishView { store.addDish($0) }
                     .environmentObject(store)
+            }
+            .sheet(isPresented: $showScanner) {
+                TechCardScannerView { dish in
+                    store.addDish(dish)
+                    showScanner = false
+                }
+                .environmentObject(store)
             }
         }
     }
@@ -172,6 +282,7 @@ struct DishDetailView: View {
     @State private var pdfURL: URL? = nil
     @State private var showCookingMode = false
     @State private var showVersions = false
+    @State private var showQRCode = false
 
     var currentDish: Dish {
         store.dishes.first(where: { $0.id == dish.id }) ?? dish
@@ -179,6 +290,20 @@ struct DishDetailView: View {
 
     private var dishStillExists: Bool {
         store.dishes.contains(where: { $0.id == dish.id })
+    }
+
+    private func printTechCard() {
+        guard let pdfURL = PDFReportGenerator.createTechCardPDF(dish: currentDish, store: store) else { return }
+        guard let pdfData = try? Data(contentsOf: pdfURL) else { return }
+
+        let printInfo = UIPrintInfo(dictionary: nil)
+        printInfo.jobName = currentDish.name
+        printInfo.outputType = .general
+
+        let controller = UIPrintInteractionController.shared
+        controller.printInfo = printInfo
+        controller.printingItem = pdfData
+        controller.present(animated: true)
     }
 
     var body: some View {
@@ -194,13 +319,20 @@ struct DishDetailView: View {
                             .foregroundStyle(.secondary)
 
                         HStack {
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text("Себестоимость")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Text("\(store.calculateDishCost(currentDish), specifier: "%.2f")")
                                     .font(.title2)
                                     .bold()
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 9))
+                                    Text("обновляется с ценами склада")
+                                        .font(.system(size: 10))
+                                }
+                                .foregroundStyle(.secondary)
                             }
 
                             Spacer()
@@ -213,6 +345,40 @@ struct DishDetailView: View {
                                     .font(.title2)
                                     .bold()
                                     .foregroundStyle(.chefAccent)
+                            }
+                        }
+
+                        // История цен ключевых ингредиентов
+                        let ingredientsWithHistory = currentDish.ingredients.compactMap { ingredient -> (name: String, history: [PricePoint])? in
+                            guard let item = store.inventoryItems.first(where: { $0.name.lowercased() == ingredient.productName.lowercased() }),
+                                  item.priceHistory.count > 1 else { return nil }
+                            return (name: ingredient.productName, history: Array(item.priceHistory.suffix(3)))
+                        }
+                        if !ingredientsWithHistory.isEmpty {
+                            Divider()
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("История цен", systemImage: "clock.arrow.circlepath")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.secondary)
+                                ForEach(ingredientsWithHistory.prefix(3), id: \.name) { entry in
+                                    let sorted = entry.history.sorted { $0.date < $1.date }
+                                    if sorted.count >= 2 {
+                                        let prev = sorted[sorted.count - 2]
+                                        let curr = sorted[sorted.count - 1]
+                                        HStack(spacing: 6) {
+                                            Text(entry.name)
+                                                .font(.caption)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            Text("\(prev.price, specifier: "%.2f") → \(curr.price, specifier: "%.2f")")
+                                                .font(.caption)
+                                                .foregroundStyle(curr.price > prev.price ? .red : .green)
+                                            Text(curr.date.formatted(date: .abbreviated, time: .omitted))
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -230,6 +396,17 @@ struct DishDetailView: View {
                                 .foregroundStyle(currentDish.menuStatus.color)
                             Text(currentDish.menuStatus.rawValue)
                                 .font(.subheadline).foregroundStyle(currentDish.menuStatus.color)
+                            Spacer()
+                            Label(currentDish.dishType.rawValue, systemImage: currentDish.dishType.icon)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if currentDish.portionWeight > 0 {
+                            HStack {
+                                Image(systemName: "scalemass")
+                                    .foregroundStyle(.chefAccent)
+                                Text("Выход: \(currentDish.portionWeight, specifier: "%.0f") \(currentDish.portionWeightUnit)")
+                                    .font(.subheadline.weight(.medium))
+                            }
                         }
 
                         if !currentDish.allergens.isEmpty {
@@ -239,6 +416,25 @@ struct DishDetailView: View {
                                 Text(currentDish.allergens.joined(separator: " · "))
                                     .font(.caption).foregroundStyle(.orange)
                             }
+                        }
+                    }
+                }
+
+                if currentDish.calories > 0 || currentDish.proteins > 0 {
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Нутриенты на порцию", systemImage: "flame.fill")
+                                .font(.headline)
+                            HStack(spacing: 0) {
+                                NutrientCell(value: currentDish.calories, unit: "ккал", label: "Калории", color: .orange)
+                                Divider()
+                                NutrientCell(value: currentDish.proteins, unit: "г", label: "Белки", color: .blue)
+                                Divider()
+                                NutrientCell(value: currentDish.fats, unit: "г", label: "Жиры", color: .yellow)
+                                Divider()
+                                NutrientCell(value: currentDish.carbs, unit: "г", label: "Углев.", color: .green)
+                            }
+                            .frame(height: 60)
                         }
                     }
                 }
@@ -345,6 +541,10 @@ struct DishDetailView: View {
                     }
                 }
 
+                BigActionButton(title: "Печать", icon: "printer") {
+                    printTechCard()
+                }
+
                 BigActionButton(title: "Дублировать техкарту", icon: "doc.on.doc") {
                     var copy = currentDish
                     copy.id = UUID()
@@ -360,6 +560,10 @@ struct DishDetailView: View {
 
                 BigActionButton(title: "История версий", icon: "clock.arrow.circlepath") {
                     showVersions = true
+                }
+
+                BigActionButton(title: "QR-код техкарты", icon: "qrcode") {
+                    showQRCode = true
                 }
 
                 Button(role: .destructive) {
@@ -417,6 +621,9 @@ struct DishDetailView: View {
             CookingModeView(dish: currentDish)
                 .environmentObject(store)
         }
+        .sheet(isPresented: $showQRCode) {
+            DishQRCodeView(dish: currentDish)
+        }
         .alert("Удалить техкарту?", isPresented: $showDeleteAlert) {
             Button("Отмена", role: .cancel) {}
             Button("Удалить", role: .destructive) {
@@ -425,6 +632,66 @@ struct DishDetailView: View {
             }
         } message: {
             Text("Блюдо будет удалено из техкарт.")
+        }
+    }
+}
+
+// MARK: - QR Code Sheet
+
+struct DishQRCodeView: View {
+    let dish: Dish
+    @Environment(\.dismiss) var dismiss
+    @State private var showShareSheet = false
+
+    private var qrString: String { "chefpro://dish/\(dish.id.uuidString)" }
+    private var qrImage: UIImage { generateQRCode(from: qrString) }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Image(uiImage: qrImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 260, height: 260)
+                    .padding(12)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.1), radius: 10)
+
+                Text(dish.name)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+
+                Text("Отсканируй камерой iPhone для открытия рецепта")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                Button {
+                    showShareSheet = true
+                } label: {
+                    Label("Поделиться", systemImage: "square.and.arrow.up")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.chefAccent)
+                .padding(.horizontal, 32)
+            }
+            .padding(.top, 32)
+            .navigationTitle("QR-код")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Закрыть") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: [qrImage])
+            }
         }
     }
 }
@@ -505,8 +772,15 @@ struct AddDishView: View {
     @State private var allergens: [String] = []
     @State private var cookTime: Int = 0
     @State private var menuStatus: DishMenuStatus = .active
+    @State private var dishType: DishType = .dish
+    @State private var portionWeight = ""
+    @State private var portionWeightUnit = "г"
     @State private var photoImage: UIImage? = nil
     @State private var steps: [CookingStep] = []
+    @State private var calories: Double = 0
+    @State private var proteins: Double = 0
+    @State private var fats: Double = 0
+    @State private var carbs: Double = 0
 
     var onSave: (Dish) -> Void
 
@@ -526,8 +800,15 @@ struct AddDishView: View {
                 allergens: $allergens,
                 cookTime: $cookTime,
                 menuStatus: $menuStatus,
+                dishType: $dishType,
+                portionWeight: $portionWeight,
+                portionWeightUnit: $portionWeightUnit,
                 photoImage: $photoImage,
-                steps: $steps
+                steps: $steps,
+                calories: $calories,
+                proteins: $proteins,
+                fats: $fats,
+                carbs: $carbs
             )
             .navigationTitle("Новое блюдо")
             .toolbar {
@@ -553,6 +834,13 @@ struct AddDishView: View {
                             dish.photoFilename = filename
                         }
                         dish.steps = steps
+                        dish.dishType = dishType
+                        dish.portionWeight = parseNonNegativeDouble(portionWeight) ?? 0
+                        dish.portionWeightUnit = portionWeightUnit
+                        dish.calories = calories
+                        dish.proteins = proteins
+                        dish.fats = fats
+                        dish.carbs = carbs
                         onSave(dish)
                         dismiss()
                     }
@@ -576,8 +864,15 @@ struct EditDishView: View {
     @State private var allergens: [String]
     @State private var cookTime: Int
     @State private var menuStatus: DishMenuStatus
+    @State private var dishType: DishType
+    @State private var portionWeight: String
+    @State private var portionWeightUnit: String
     @State private var photoImage: UIImage? = nil
     @State private var steps: [CookingStep]
+    @State private var calories: Double
+    @State private var proteins: Double
+    @State private var fats: Double
+    @State private var carbs: Double
 
     var onSave: (Dish) -> Void
 
@@ -591,7 +886,14 @@ struct EditDishView: View {
         _allergens   = State(initialValue: dish.allergens)
         _cookTime    = State(initialValue: dish.cookTime)
         _menuStatus  = State(initialValue: dish.menuStatus)
+        _dishType    = State(initialValue: dish.dishType)
+        _portionWeight = State(initialValue: dish.portionWeight > 0 ? String(dish.portionWeight) : "")
+        _portionWeightUnit = State(initialValue: dish.portionWeightUnit)
         _steps       = State(initialValue: dish.steps)
+        _calories    = State(initialValue: dish.calories)
+        _proteins    = State(initialValue: dish.proteins)
+        _fats        = State(initialValue: dish.fats)
+        _carbs       = State(initialValue: dish.carbs)
     }
 
     private var canSave: Bool {
@@ -610,8 +912,15 @@ struct EditDishView: View {
                 allergens: $allergens,
                 cookTime: $cookTime,
                 menuStatus: $menuStatus,
+                dishType: $dishType,
+                portionWeight: $portionWeight,
+                portionWeightUnit: $portionWeightUnit,
                 photoImage: $photoImage,
-                steps: $steps
+                steps: $steps,
+                calories: $calories,
+                proteins: $proteins,
+                fats: $fats,
+                carbs: $carbs
             )
             .navigationTitle("Редактировать")
             .onAppear {
@@ -649,6 +958,13 @@ struct EditDishView: View {
                             updatedDish.photoFilename = nil
                         }
                         updatedDish.steps = steps
+                        updatedDish.dishType = dishType
+                        updatedDish.portionWeight = parseNonNegativeDouble(portionWeight) ?? 0
+                        updatedDish.portionWeightUnit = portionWeightUnit
+                        updatedDish.calories = calories
+                        updatedDish.proteins = proteins
+                        updatedDish.fats = fats
+                        updatedDish.carbs = carbs
                         store.saveRecipeVersion(for: dish)
                         onSave(updatedDish)
                         dismiss()
@@ -669,13 +985,21 @@ struct DishEditorForm: View {
     @Binding var allergens: [String]
     @Binding var cookTime: Int
     @Binding var menuStatus: DishMenuStatus
+    @Binding var dishType: DishType
+    @Binding var portionWeight: String
+    @Binding var portionWeightUnit: String
     @Binding var photoImage: UIImage?
     @Binding var steps: [CookingStep]
+    @Binding var calories: Double
+    @Binding var proteins: Double
+    @Binding var fats: Double
+    @Binding var carbs: Double
 
     @State private var productName    = ""
     @State private var quantity       = ""
     @State private var unit           = "г"
     @State private var yieldFactor    = "1.0"
+    @State private var normalisedHint: String? = nil
     @State private var showSuggestions = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var newStepText = ""
@@ -744,6 +1068,65 @@ struct DishEditorForm: View {
                         Label(s.rawValue, systemImage: s.icon).tag(s)
                     }
                 }
+                Picker("Тип", selection: $dishType) {
+                    ForEach(DishType.allCases, id: \.self) { t in
+                        Label(t.rawValue, systemImage: t.icon).tag(t)
+                    }
+                }
+            }
+
+            Section("Выход готового блюда") {
+                HStack {
+                    TextField("Количество", text: $portionWeight)
+                        .keyboardType(.decimalPad)
+                    Divider()
+                    Picker("", selection: $portionWeightUnit) {
+                        ForEach(["г","кг","мл","л","шт","порц"], id: \.self) { u in
+                            Text(u).tag(u)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 70)
+                }
+            }
+
+            Section("Нутриенты (на порцию)") {
+                HStack {
+                    Label("Калории", systemImage: "flame")
+                    Spacer()
+                    TextField("0", value: $calories, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("ккал").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Label("Белки", systemImage: "circle.grid.3x3")
+                    Spacer()
+                    TextField("0", value: $proteins, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("г").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Label("Жиры", systemImage: "drop.fill")
+                    Spacer()
+                    TextField("0", value: $fats, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("г").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Label("Углеводы", systemImage: "leaf.fill")
+                    Spacer()
+                    TextField("0", value: $carbs, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("г").foregroundStyle(.secondary)
+                }
             }
 
             Section("Добавить ингредиент") {
@@ -774,6 +1157,26 @@ struct DishEditorForm: View {
 
                 TextField("Количество", text: $quantity)
                     .keyboardType(.decimalPad)
+                    .onChange(of: quantity) { _, newVal in
+                        if let qty = Double(newVal.replacingOccurrences(of: ",", with: ".")) {
+                            let (normQty, normUnit) = normaliseUnit(quantity: qty, unit: unit)
+                            if normUnit != unit {
+                                let formatted = normQty.truncatingRemainder(dividingBy: 1) == 0
+                                    ? String(format: "%.0f", normQty) : String(format: "%.3g", normQty)
+                                normalisedHint = "→ \(formatted) \(normUnit)"
+                            } else {
+                                normalisedHint = nil
+                            }
+                        } else {
+                            normalisedHint = nil
+                        }
+                    }
+
+                if let hint = normalisedHint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.chefAccent)
+                }
 
                 Picker("Единица", selection: $unit) {
                     ForEach(units, id: \.self) { Text($0) }
@@ -1337,6 +1740,30 @@ let recipeTemplates: [RecipeTemplate] = [
         RecipeIngredient(productName: "Арахис", quantity: 20, unit: "г"),
     ]),
 ]
+
+// MARK: - Nutrient Cell
+
+private struct NutrientCell: View {
+    let value: Double
+    let unit: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value > 0 ? String(format: "%.0f", value) : "—")
+                .font(.title3.bold())
+                .foregroundStyle(color)
+            Text(unit)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
 
 // MARK: - Cooking Mode
 

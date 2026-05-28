@@ -217,6 +217,11 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: store.appLanguage) { _, lang in
+                    let code = lang == .english ? "en" : "ru"
+                    UserDefaults.standard.set([code], forKey: "AppleLanguages")
+                    UserDefaults.standard.synchronize()
+                }
                 if store.appLanguage == .english {
                     Text("English mode: main navigation labels switch to English. Full localization coming soon.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -284,6 +289,27 @@ struct SettingsView: View {
                         .font(.caption)
                         ProgressView(value: pct).tint(pct > 0.9 ? .red : pct > 0.7 ? .orange : .chefAccent)
                     }
+                }
+            }
+
+            Section("Плановые показатели") {
+                HStack {
+                    Text("План выручки (мес.)")
+                    Spacer()
+                    TextField("0", value: $store.monthlyRevenuePlan, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 100)
+                    Text("₽").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Цель Food Cost")
+                    Spacer()
+                    TextField("30", value: $store.monthlyFoodCostTarget, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                    Text("%").foregroundStyle(.secondary)
                 }
             }
 

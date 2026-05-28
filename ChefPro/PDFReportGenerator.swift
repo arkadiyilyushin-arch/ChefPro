@@ -214,4 +214,93 @@ final class PDFReportGenerator {
             return nil
         }
     }
+
+    static func createMenuPDF(store: ChefProStore) -> URL? {
+        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ChefPro_Menu.pdf")
+
+        do {
+            try renderer.writePDF(to: url) { context in
+                context.beginPage()
+                var y: CGFloat = 40
+
+                func drawText(_ text: String, size: CGFloat = 12, bold: Bool = false, x: CGFloat = 40, color: UIColor = .black, centered: Bool = false) {
+                    let font = bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size)
+                    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                    let str = NSString(string: text)
+                    if centered {
+                        let w: CGFloat = 515
+                        let textWidth = str.boundingRect(with: CGSize(width: w, height: 40), options: [], attributes: attrs, context: nil).width
+                        str.draw(at: CGPoint(x: (595 - textWidth) / 2, y: y), withAttributes: attrs)
+                    } else {
+                        str.draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+                    }
+                    y += size + 8
+                }
+
+                func newPageIfNeeded() {
+                    if y > 780 { context.beginPage(); y = 40 }
+                }
+
+                // Header
+                drawText(store.restaurantName, size: 28, bold: true, centered: true)
+                drawText("МЕНЮ", size: 16, centered: true)
+                let df = DateFormatter(); df.locale = Locale(identifier: "ru_RU"); df.dateFormat = "d MMMM yyyy"
+                drawText(df.string(from: Date()), size: 10, color: .gray, centered: true)
+                y += 16
+
+                // Draw horizontal line
+                UIColor.lightGray.setStroke()
+                let path = UIBezierPath()
+                path.move(to: CGPoint(x: 40, y: y))
+                path.addLine(to: CGPoint(x: 555, y: y))
+                path.lineWidth = 0.5
+                path.stroke()
+                y += 16
+
+                // Group by category
+                let activeMenuDishes = store.dishes.filter { $0.menuStatus != .removed && $0.dishType == .dish }
+                let categories = Array(Set(activeMenuDishes.map { $0.category })).sorted()
+
+                for category in categories {
+                    newPageIfNeeded()
+                    drawText(category.uppercased(), size: 13, bold: true, color: .darkGray)
+                    y += 4
+
+                    let dishes = activeMenuDishes.filter { $0.category == category }
+                    for dish in dishes {
+                        newPageIfNeeded()
+                        // Dish name + price
+                        let nameFont = UIFont.boldSystemFont(ofSize: 11)
+                        let priceFont = UIFont.systemFont(ofSize: 11)
+                        let name = NSString(string: dish.name)
+                        let price = NSString(string: "\(Int(dish.salePrice)) ₽")
+                        name.draw(at: CGPoint(x: 40, y: y), withAttributes: [.font: nameFont])
+                        let priceWidth = price.boundingRect(with: CGSize(width: 200, height: 20), options: [], attributes: [.font: priceFont], context: nil).width
+                        price.draw(at: CGPoint(x: 555 - priceWidth, y: y), withAttributes: [.font: priceFont, .foregroundColor: UIColor.systemOrange])
+                        y += 15
+                        // Allergens + weight
+                        var details: [String] = []
+                        if dish.portionWeight > 0 { details.append("\(Int(dish.portionWeight))\(dish.portionWeightUnit)") }
+                        if !dish.allergens.isEmpty { details.append("Алл: \(dish.allergens.joined(separator: ", "))") }
+                        if dish.calories > 0 { details.append("\(Int(dish.calories)) ккал") }
+                        if !details.isEmpty {
+                            drawText(details.joined(separator: " · "), size: 9, x: 40, color: .gray)
+                        }
+                        // Dots between name and price
+                        y += 4
+                    }
+                    y += 8
+                }
+
+                // Footer
+                y = 815
+                drawText("Приятного аппетита! · \(store.restaurantName)", size: 9, color: .gray, centered: true)
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
 }

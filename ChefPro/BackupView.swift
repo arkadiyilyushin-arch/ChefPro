@@ -10,9 +10,55 @@ struct BackupView: View {
     @State private var importErrorMessage = ""
     @State private var showImportConfirm = false
     @State private var pendingImportURL: URL? = nil
+    @State private var showICloudSyncSuccess = false
+    @State private var showICloudSyncError = false
+    @State private var showICloudLoadConfirm = false
+
+    private var iCloudAvailable: Bool {
+        FileManager.default.url(forUbiquityContainerIdentifier: nil) != nil
+    }
+
+    private var iCloudLastSync: Date? {
+        UserDefaults.standard.object(forKey: "icloud_last_sync") as? Date
+    }
 
     var body: some View {
         List {
+            // ── iCloud ────────────────────────────────────────────
+            Section("iCloud") {
+                if iCloudAvailable {
+                    if let syncDate = iCloudLastSync {
+                        HStack {
+                            Text("Последняя синхронизация")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                            Spacer()
+                            Text(syncDate, style: .relative)
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                    }
+
+                    Button {
+                        store.syncToiCloud()
+                        showICloudSyncSuccess = true
+                    } label: {
+                        Label("Сохранить в iCloud", systemImage: "icloud.and.arrow.up")
+                            .foregroundStyle(.chefAccent)
+                    }
+
+                    Button {
+                        showICloudLoadConfirm = true
+                    } label: {
+                        Label("Загрузить из iCloud", systemImage: "icloud.and.arrow.down")
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    Label("iCloud недоступен", systemImage: "icloud.slash")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Экспорт данных", systemImage: "arrow.up.doc.fill")
@@ -109,6 +155,26 @@ struct BackupView: View {
             Button("OK") {}
         } message: {
             Text(importErrorMessage)
+        }
+        .alert("Сохранено в iCloud", isPresented: $showICloudSyncSuccess) {
+            Button("OK") {}
+        } message: {
+            Text("Данные успешно скопированы в iCloud.")
+        }
+        .alert("Ошибка iCloud", isPresented: $showICloudSyncError) {
+            Button("OK") {}
+        } message: {
+            Text("Не удалось загрузить данные из iCloud.")
+        }
+        .alert("Загрузить из iCloud?", isPresented: $showICloudLoadConfirm) {
+            Button("Отмена", role: .cancel) {}
+            Button("Загрузить", role: .destructive) {
+                store.syncFromiCloud { success in
+                    if success { showICloudSyncSuccess = true } else { showICloudSyncError = true }
+                }
+            }
+        } message: {
+            Text("Текущие данные будут заменены данными из iCloud.")
         }
     }
 }

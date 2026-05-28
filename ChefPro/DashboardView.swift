@@ -54,22 +54,31 @@ struct EmptyStateView: View {
     let icon: String
     let title: String
     let subtitle: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 56))
+                .foregroundStyle(.tertiary)
             Text(title)
-                .font(.title3)
-                .bold()
+                .font(.title3).bold()
+                .foregroundStyle(.primary)
             Text(subtitle)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if let title = actionTitle, let action = action {
+                Button(action: action) {
+                    Label(title, systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(28)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -141,6 +150,45 @@ struct DashboardView: View {
                             Spacer()
                             // Компактный статус синхронизации
                             syncIcon
+                        }
+                    }
+
+                    // ── KPI Цели месяца ─────────────────────────────────
+                    if store.monthlyRevenuePlan > 0 {
+                        BigCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Цели месяца", systemImage: "target")
+                                    .font(.headline)
+
+                                // Revenue progress
+                                let revProgress = min(store.currentMonthRevenue / store.monthlyRevenuePlan, 1.0)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("Выручка")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text("\(Int(store.currentMonthRevenue)) / \(Int(store.monthlyRevenuePlan)) ₽")
+                                            .font(.caption.bold())
+                                    }
+                                    ProgressView(value: revProgress)
+                                        .tint(revProgress >= 1.0 ? .green : .chefAccent)
+                                }
+
+                                // Food Cost target
+                                if store.currentMonthAvgFoodCost > 0 {
+                                    let fcColor: Color = store.currentMonthAvgFoodCost > store.monthlyFoodCostTarget ? .red : .green
+                                    HStack {
+                                        Text("Food Cost")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text("\(String(format: "%.1f", store.currentMonthAvgFoodCost))% / цель \(String(format: "%.0f", store.monthlyFoodCostTarget))%")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(fcColor)
+                                    }
+                                }
+                            }
                         }
                     }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import LocalAuthentication
 
 // MARK: - Login
 
@@ -8,60 +9,97 @@ struct LoginView: View {
     @State private var selectedEmployee: Employee?
     @State private var pin = ""
     @State private var showError = false
+    @State private var showRegister = false
+    @State private var knownIDs: Set<UUID> = []
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
+
+                    // MARK: Logo
                     VStack(spacing: 12) {
                         Image(systemName: "fork.knife.circle.fill")
                             .font(.system(size: 82))
                             .foregroundStyle(.chefAccent)
-
                         Text("ChefPro")
-                            .font(.largeTitle)
-                            .bold()
-
+                            .font(.largeTitle).bold()
                         Text("Вход сотрудника")
                             .font(.headline)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.top, 30)
 
+                    // MARK: Employee list
                     BigCard {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("Выберите сотрудника")
-                                .font(.headline)
-
-                            ForEach(store.employees) { employee in
+                            HStack {
+                                Text("Выберите сотрудника")
+                                    .font(.headline)
+                                Spacer()
                                 Button {
-                                    selectedEmployee = employee
-                                    pin = ""
-                                    showError = false
+                                    knownIDs = Set(store.employees.map(\.id))
+                                    showRegister = true
                                 } label: {
-                                    HStack(spacing: 14) {
-                                        Image(systemName: selectedEmployee?.id == employee.id ? "checkmark.circle.fill" : "person.crop.circle")
-                                            .font(.title2)
-                                            .foregroundStyle(selectedEmployee?.id == employee.id ? Color.green : Color.secondary)
-
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(employee.name)
-                                                .font(.headline)
-                                                .foregroundStyle(.primary)
-                                            Text(employee.position)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-
-                                        Spacer()
-                                    }
-                                    .frame(minHeight: 58)
+                                    Label("Добавить", systemImage: "person.badge.plus")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.chefAccent)
                                 }
-                                .buttonStyle(.plain)
+                            }
+
+                            if store.employees.isEmpty {
+                                VStack(spacing: 10) {
+                                    Image(systemName: "person.slash")
+                                        .font(.system(size: 40))
+                                        .foregroundStyle(.tertiary)
+                                    Text("Нет сотрудников")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                    Text("Нажмите «Добавить» чтобы создать первого сотрудника")
+                                        .font(.caption).foregroundStyle(.tertiary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                            } else {
+                                ForEach(store.employees) { employee in
+                                    Button {
+                                        selectedEmployee = employee
+                                        pin = ""
+                                        showError = false
+                                    } label: {
+                                        HStack(spacing: 14) {
+                                            Image(systemName: selectedEmployee?.id == employee.id
+                                                  ? "checkmark.circle.fill" : "person.crop.circle")
+                                                .font(.title2)
+                                                .foregroundStyle(selectedEmployee?.id == employee.id
+                                                                 ? Color.green : Color.secondary)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(employee.name)
+                                                    .font(.headline).foregroundStyle(.primary)
+                                                Text(employee.position)
+                                                    .font(.caption).foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                            if employee.id == store.currentEmployeeID {
+                                                Button {
+                                                    authenticateWithBiometrics(employee: employee)
+                                                } label: {
+                                                    Image(systemName: LAContext().biometryType == .faceID ? "faceid" : "touchid")
+                                                        .font(.title3)
+                                                        .foregroundStyle(.chefAccent)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                        .frame(minHeight: 58)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
 
+                    // MARK: PIN
                     BigCard {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("PIN-код")
@@ -74,42 +112,52 @@ struct LoginView: View {
                                 .padding()
                                 .background(Color(.tertiarySystemGroupedBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .onChange(of: pin) { _, val in
+                                    if val.count > 4 { pin = String(val.prefix(4)) }
+                                }
 
                             if showError {
                                 Text("Неверный PIN-код")
-                                    .foregroundStyle(.red)
-                                    .font(.subheadline)
+                                    .foregroundStyle(.red).font(.subheadline)
                             }
 
                             BigActionButton(title: "Войти", icon: "lock.open.fill") {
-                                guard let selectedEmployee else {
-                                    showError = true
-                                    return
-                                }
-
-                                let success = store.login(employee: selectedEmployee, pin: pin)
-                                showError = !success
+                                guard let selectedEmployee else { showError = true; return }
+                                showError = !store.login(employee: selectedEmployee, pin: pin)
                             }
-                            .disabled(selectedEmployee == nil || pin.isEmpty)
+                            .disabled(selectedEmployee == nil || pin.count != 4)
                         }
-                    }
-
-                    BigCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Демо PIN-коды")
-                                .font(.headline)
-                            Text("Шеф: 1111")
-                            Text("Су-шеф: 2222")
-                            Text("Кладовщик: 3333")
-                            Text("Администратор: 4444")
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
             }
             .background(Color.chefBackground)
+            .sheet(isPresented: $showRegister) {
+                AddEditEmployeeView(employee: nil)
+                    .environmentObject(store)
+                    .onDisappear {
+                        // Auto-select the newly registered employee
+                        if let newEmployee = store.employees.first(where: { !knownIDs.contains($0.id) }) {
+                            selectedEmployee = newEmployee
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Biometric Authentication
+
+    private func authenticateWithBiometrics(employee: Employee) {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else { return }
+        let reason = "Войти как \(employee.name)"
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, _ in
+            if success {
+                DispatchQueue.main.async {
+                    _ = store.login(employee: employee, pin: employee.pin)
+                }
+            }
         }
     }
 }

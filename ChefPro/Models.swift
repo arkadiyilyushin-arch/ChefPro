@@ -12,6 +12,18 @@ struct RecipeIngredient: Identifiable, Codable {
 
 let allAllergens = ["Глютен","Лактоза","Яйца","Орехи","Рыба","Морепродукты","Соя","Сельдерей","Горчица","Кунжут","Сульфиты"]
 
+enum DishType: String, Codable, CaseIterable {
+    case dish         = "Блюдо"
+    case semifinished = "Полуфабрикат"
+
+    var icon: String {
+        switch self {
+        case .dish:         return "fork.knife"
+        case .semifinished: return "archivebox.fill"
+        }
+    }
+}
+
 enum DishMenuStatus: String, Codable, CaseIterable {
     case active   = "Активное"
     case seasonal = "Сезонное"
@@ -54,6 +66,13 @@ struct Dish: Identifiable, Codable {
     var menuStatus: DishMenuStatus = .active
     var photoFilename: String? = nil
     var steps: [CookingStep] = []
+    var dishType: DishType = .dish
+    var portionWeight: Double = 0      // Выход готового блюда, граммы
+    var portionWeightUnit: String = "г"
+    var calories: Double = 0       // ккал на порцию
+    var proteins: Double = 0       // белки, г
+    var fats: Double = 0           // жиры, г
+    var carbs: Double = 0          // углеводы, г
 }
 
 struct Sale: Identifiable, Codable {
@@ -90,6 +109,7 @@ struct InventoryItem: Identifiable, Codable {
     var expiryDate:     Date?        = nil
     var orderUnit:      String       = ""
     var orderUnitRatio: Double       = 1
+    var sourceDishID:   UUID?        = nil   // если создан из полуфабриката
 
     var isLowStock: Bool { quantity <= minQuantity }
 
@@ -111,6 +131,7 @@ struct Delivery: Identifiable, Codable {
     var id = UUID()
     var supplier: String
     var productName: String
+    var category: String = ""
     var quantity: Double
     var unit: String
     var price: Double
@@ -129,6 +150,51 @@ struct WriteOff: Identifiable, Codable {
     var date: Date
 }
 
+enum StockMovementType: String, Codable, CaseIterable {
+    case delivery    = "Приход"
+    case writeOff    = "Списание"
+    case production  = "Производство"
+    case audit       = "Инвентаризация"
+    case adjustment  = "Корректировка"
+
+    var icon: String {
+        switch self {
+        case .delivery:   return "tray.and.arrow.down.fill"
+        case .writeOff:   return "trash.fill"
+        case .production: return "flame.fill"
+        case .audit:      return "list.clipboard.fill"
+        case .adjustment: return "slider.horizontal.3"
+        }
+    }
+    var color: Color {
+        switch self {
+        case .delivery:   return .green
+        case .writeOff:   return .red
+        case .production: return .orange
+        case .audit:      return .purple
+        case .adjustment: return .blue
+        }
+    }
+    var sign: String {
+        switch self {
+        case .delivery:   return "+"
+        case .writeOff, .production: return "−"
+        case .audit, .adjustment: return "±"
+        }
+    }
+}
+
+struct StockMovement: Identifiable, Codable {
+    var id = UUID()
+    var itemName: String
+    var itemID: UUID?
+    var type: StockMovementType
+    var quantity: Double
+    var unit: String
+    var date: Date = Date()
+    var note: String = ""
+}
+
 struct Production: Identifiable, Codable {
     var id = UUID()
     var dishName: String
@@ -136,6 +202,7 @@ struct Production: Identifiable, Codable {
     var totalCost: Double
     var date: Date
     var employee: String
+    var actualPortionWeight: Double = 0   // фактический выход, г (0 = не указан)
 }
 
 struct UserProfile: Codable {
@@ -186,6 +253,15 @@ struct Shift: Identifiable, Codable {
     var deliveriesCount:     Int    = 0
     var totalProductionCost: Double = 0
     var totalDeliveryCost:   Double = 0
+
+    // MARK: Financial data (Feature 5)
+    var revenue:          Double = 0   // общая выручка за смену
+    var cashRevenue:      Double = 0   // наличные
+    var cardRevenue:      Double = 0   // безнал
+    var guestsCount:      Int    = 0   // количество гостей
+    var foodCostForShift: Double = 0   // food cost % за смену
+
+    var averageCheck: Double { guestsCount > 0 ? revenue / Double(guestsCount) : 0 }
 
     var isOpen: Bool { closedAt == nil }
 
@@ -333,6 +409,7 @@ struct AppBackup: Codable {
     var workSchedule: [WorkShift]
     var temperatureLogs: [TemperatureLog]
     var shiftHistory: [Shift]
+    var stockMovements: [StockMovement] = []
 }
 
 struct RecipeVersion: Identifiable, Codable {

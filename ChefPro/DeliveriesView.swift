@@ -8,14 +8,16 @@ struct DeliveriesView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    InfoCard(title: "Сумма приемок", value: "\(Int(store.totalDeliverySum))", subtitle: "за весь период", icon: "tray.and.arrow.down.fill")
-                        .padding(.horizontal)
+            VStack(spacing: 0) {
+                InfoCard(title: "Сумма приемок", value: "\(Int(store.totalDeliverySum))", subtitle: "за весь период", icon: "tray.and.arrow.down.fill")
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
 
-                    if store.deliveries.isEmpty {
-                        EmptyStateView(icon: "tray", title: "Приемок пока нет", subtitle: "Добавь первую приемку товара.")
-                    } else {
+                if store.deliveries.isEmpty {
+                    EmptyStateView(icon: "tray", title: "Приемок пока нет", subtitle: "Добавь первую приемку товара.")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
                         ForEach(store.deliveries.reversed()) { delivery in
                             BigCard {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -50,10 +52,19 @@ struct DeliveriesView: View {
                                 }
                             }
                             .padding(.horizontal)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    store.deliveries.removeAll { $0.id == delivery.id }
+                                } label: { Label("Удалить", systemImage: "trash") }
+                            }
                         }
                     }
+                    .listStyle(.plain)
+                    .background(Color.chefBackground)
                 }
-                .padding(.vertical)
             }
             .background(Color.chefBackground)
             .navigationTitle("Приемка")
@@ -77,12 +88,15 @@ struct AddDeliveryView: View {
     @State private var supplierPickerID: UUID? = nil
     @State private var supplier     = ""
     @State private var productName  = ""
+    @State private var category     = ""
     @State private var quantity     = ""
     @State private var unit         = "кг"
     @State private var price        = ""
     @State private var acceptedBy   = ""
     @State private var notes        = ""
     @State private var showScanner  = false
+    @State private var showInvoiceScanner = false
+    @State private var showCategoryPicker = false
 
     var onSave: (Delivery) -> Void
     let units = ["кг", "г", "л", "мл", "шт"]
@@ -118,14 +132,46 @@ struct AddDeliveryView: View {
                 Section("Товар") {
                     HStack {
                         TextField("Название продукта", text: $productName)
-                        Button {
-                            showScanner = true
-                        } label: {
+                            .onChange(of: productName) { _, name in
+                                // Автозаполнение категории если товар есть на складе
+                                if let item = store.inventoryItems.first(where: {
+                                    $0.name.lowercased() == name.lowercased()
+                                }) {
+                                    if category.isEmpty { category = item.category }
+                                    if unit == "кг"     { unit = item.unit }
+                                }
+                            }
+                        Button { showScanner = true } label: {
                             Image(systemName: "camera.viewfinder")
                                 .foregroundStyle(.chefAccent)
                         }
                         .buttonStyle(.plain)
+                        Button { showInvoiceScanner = true } label: {
+                            Image(systemName: "doc.text.viewfinder")
+                                .foregroundStyle(.chefAccent)
+                        }
+                        .buttonStyle(.plain)
                     }
+
+                    // Категория
+                    if store.inventoryCategories.isEmpty {
+                        TextField("Категория", text: $category)
+                    } else {
+                        HStack {
+                            TextField("Категория", text: $category)
+                            Menu {
+                                ForEach(store.inventoryCategories, id: \.self) { cat in
+                                    Button(cat) { category = cat }
+                                }
+                                Divider()
+                                Button("Без категории") { category = "Без категории" }
+                            } label: {
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .foregroundStyle(.chefAccent)
+                            }
+                        }
+                    }
+
                     TextField("Количество", text: $quantity).keyboardType(.decimalPad)
                     Picker("Единица", selection: $unit) {
                         ForEach(units, id: \.self) { Text($0) }
@@ -152,6 +198,7 @@ struct AddDeliveryView: View {
                         var delivery = Delivery(
                             supplier: supplier,
                             productName: productName,
+                            category: category.trimmingCharacters(in: .whitespaces),
                             quantity: parsePositiveDouble(quantity) ?? 0,
                             unit: unit,
                             price: parseNonNegativeDouble(price) ?? 0,
@@ -173,9 +220,18 @@ struct AddDeliveryView: View {
                 if let matched = store.inventoryItem(forBarcode: code) {
                     productName = matched.name
                     unit = matched.unit
+                    category = matched.category
                 } else {
                     productName = code
                 }
+            }
+        }
+        .sheet(isPresented: $showInvoiceScanner) {
+            InvoiceScannerView { result in
+                if !result.productName.isEmpty { productName = result.productName }
+                if let qty = result.quantity { quantity = String(format: "%.1f", qty) }
+                if !result.unit.isEmpty { unit = result.unit }
+                if let price = result.price { self.price = String(format: "%.2f", price) }
             }
         }
     }

@@ -1,65 +1,98 @@
 import SwiftUI
 import Charts
 
+// MARK: - Inventory Sort Order
+
+enum InventorySortOrder: String, CaseIterable {
+    case name     = "Название"
+    case quantity = "Количество"
+    case price    = "Цена"
+    case lowStock = "Критические"
+}
+
 // MARK: - Inventory
 
 struct InventoryView: View {
     @EnvironmentObject var store: ChefProStore
-    @State private var showAddItem = false
+    @State private var showAddItem  = false
+    @State private var showAudit    = false
     @State private var searchText = ""
     @State private var selectedCategory = "Все"
     @State private var showOnlyLowStock = false
+    @State private var sortOrder: InventorySortOrder = .name
 
     var categories: [String] {
         ["Все"] + store.inventoryCategories
     }
 
     var filteredItems: [InventoryItem] {
-        store.inventoryItems.filter { item in
-            let matchesSearch = searchText.isEmpty ||
-            item.name.localizedCaseInsensitiveContains(searchText) ||
-            item.category.localizedCaseInsensitiveContains(searchText)
-
-            let matchesCategory = selectedCategory == "Все" || item.category == selectedCategory
-            let matchesLowStock = !showOnlyLowStock || item.isLowStock
-
-            return matchesSearch && matchesCategory && matchesLowStock
+        var items = store.inventoryItems
+        if selectedCategory != "Все" { items = items.filter { $0.category == selectedCategory } }
+        if showOnlyLowStock { items = items.filter { $0.isLowStock } }
+        if !searchText.isEmpty {
+            items = items.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.category.localizedCaseInsensitiveContains(searchText)
+            }
         }
+        switch sortOrder {
+        case .name:     items.sort { $0.name < $1.name }
+        case .quantity: items.sort { $0.quantity < $1.quantity }
+        case .price:    items.sort { $0.pricePerUnit > $1.pricePerUnit }
+        case .lowStock: items.sort {
+            let a = $0.minQuantity > 0 && $0.quantity <= $0.minQuantity
+            let b = $1.minQuantity > 0 && $1.quantity <= $1.minQuantity
+            return a && !b
+        }
+        }
+        return items
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(categories, id: \.self) { cat in
-                                Button { selectedCategory = cat } label: {
-                                    Text(cat)
-                                        .font(.subheadline.weight(.medium))
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
-                                        .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
-                                        .clipShape(Capsule())
-                                }
+            VStack(spacing: 0) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(categories, id: \.self) { cat in
+                            Button { selectedCategory = cat } label: {
+                                Text(cat)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
+                                    .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
+                                    .clipShape(Capsule())
                             }
                         }
-                        .padding(.horizontal)
                     }
-
-                    Toggle(isOn: $showOnlyLowStock) {
-                        Label("Только заканчивается", systemImage: "exclamationmark.triangle.fill")
-                            .font(.headline)
-                    }
-                    .padding()
-                    .background(Color.chefCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
                     .padding(.horizontal)
+                }
+                .padding(.vertical, 8)
 
-                    if filteredItems.isEmpty {
-                        EmptyStateView(icon: "shippingbox", title: "Ничего не найдено", subtitle: "Попробуй изменить поиск или фильтр.")
+                Toggle(isOn: $showOnlyLowStock) {
+                    Label("Только заканчивается", systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline)
+                }
+                .padding()
+                .background(Color.chefCard)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                if filteredItems.isEmpty {
+                    if store.inventoryItems.isEmpty {
+                        EmptyStateView(
+                            icon: "shippingbox",
+                            title: "Склад пуст",
+                            subtitle: "Добавьте товары для учёта остатков"
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
+                        EmptyStateView(icon: "shippingbox", title: "Ничего не найдено", subtitle: "Попробуй изменить поиск или фильтр.")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    List {
                         ForEach(filteredItems) { item in
                             NavigationLink {
                                 InventoryDetailView(item: item)
@@ -100,23 +133,77 @@ struct InventoryView: View {
                                 }
                                 .padding(.horizontal)
                             }
-                            .buttonStyle(.plain)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    let deletedItem = item
+                                    store.inventoryItems.removeAll { $0.id == item.id }
+                                    withAnimation {
+                                        store.undoItem = UndoableItem(
+                                            type: .inventoryItem,
+                                            description: deletedItem.name
+                                        ) {
+                                            store.inventoryItems.append(deletedItem)
+                                        }
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                                        if store.undoItem?.description == deletedItem.name {
+                                            withAnimation { store.undoItem = nil }
+                                        }
+                                    }
+                                } label: { Label("Удалить", systemImage: "trash") }
+                            }
                         }
                     }
+                    .listStyle(.plain)
+                    .background(Color.chefBackground)
                 }
-                .padding(.vertical)
             }
             .background(Color.chefBackground)
             .searchable(text: $searchText, prompt: "Поиск продукта")
             .navigationTitle("Склад")
             .toolbar {
-                Button { showAddItem = true } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        ForEach(InventorySortOrder.allCases, id: \.self) { order in
+                            Button {
+                                sortOrder = order
+                            } label: {
+                                HStack {
+                                    Text(order.rawValue)
+                                    if sortOrder == order {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Сортировка", systemImage: "arrow.up.arrow.down")
+                            .font(.subheadline)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 4) {
+                        Button { showAudit = true } label: {
+                            Image(systemName: "list.clipboard.fill")
+                                .font(.title3)
+                        }
+                        Button { showAddItem = true } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showAddItem) {
                 AddInventoryItemView { store.inventoryItems.append($0) }
+            }
+            .sheet(isPresented: $showAudit) {
+                NavigationStack {
+                    InventoryAuditView().environmentObject(store)
+                }
             }
         }
     }
@@ -221,6 +308,19 @@ struct InventoryDetailView: View {
                 BigActionButton(title: "Редактировать продукт", icon: "pencil") {
                     showEdit = true
                 }
+
+                NavigationLink {
+                    StockMovementsView(filterItemName: currentItem.name).environmentObject(store)
+                } label: {
+                    Label("История движений", systemImage: "clock.arrow.circlepath")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 56)
+                        .padding(.horizontal, 18)
+                        .background(Color.chefCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                }
+                .buttonStyle(.plain)
 
                 Button(role: .destructive) {
                     showDeleteAlert = true
@@ -532,85 +632,122 @@ struct AuditEntry: Identifiable {
 
 struct InventoryAuditView: View {
     @EnvironmentObject var store: ChefProStore
+    @Environment(\.dismiss) private var dismiss
     @State private var entries: [AuditEntry] = []
-    @State private var showResult   = false
     @State private var showApplyAlert = false
+    @State private var auditDate = Date()
+    @State private var auditor = ""
 
     private var filledCount: Int { entries.filter { $0.actualDouble != nil }.count }
     private var discrepancyCount: Int { entries.filter { $0.hasDiscrepancy }.count }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                BigCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Инвентаризация", systemImage: "list.clipboard.fill").font(.headline)
-                        Text("Введите фактические остатки. Приложение покажет расхождения с учётными данными.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            Text("Заполнено: \(filledCount) / \(entries.count)")
-                                .font(.subheadline)
-                            Spacer()
-                            if discrepancyCount > 0 {
-                                Label("\(discrepancyCount) расхожд.", systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption.bold()).foregroundStyle(.orange)
-                            }
-                        }
-                    }
-                }
+    // Entries grouped by category
+    private var categories: [String] {
+        let cats = store.inventoryCategories
+        return cats.isEmpty ? ["Общее"] : cats
+    }
 
-                ForEach($entries) { $entry in
-                    BigCard {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.item.name).font(.headline)
-                                Text("Учёт: \(entry.item.quantity, specifier: "%.2f") \(entry.item.unit)")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if let diff = entry.difference, entry.actualDouble != nil {
-                                    Text(diff >= 0 ? "+\(String(format: "%.2f", diff))" : "\(String(format: "%.2f", diff))")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(diff >= 0 ? .green : .red)
+    private func entries(for category: String) -> [Int] {
+        entries.indices.filter { entries[$0].item.category == category }
+    }
+
+    var body: some View {
+        Form {
+            Section("Инвентаризация") {
+                DatePicker("Дата", selection: $auditDate, displayedComponents: .date)
+                TextField("Ответственный", text: $auditor)
+                HStack {
+                    Text("Заполнено")
+                    Spacer()
+                    Text("\(filledCount) / \(entries.count)").foregroundStyle(.secondary)
+                }
+                if discrepancyCount > 0 {
+                    Label("\(discrepancyCount) расхождений", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline).foregroundStyle(.orange)
+                }
+            }
+
+            ForEach(categories, id: \.self) { category in
+                let indices = entries(for: category)
+                if !indices.isEmpty {
+                    Section(category) {
+                        ForEach(indices, id: \.self) { idx in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entries[idx].item.name).font(.subheadline)
+                                    Text("По системе: \(entries[idx].item.quantity, specifier: "%.2f") \(entries[idx].item.unit)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    if let diff = entries[idx].difference, entries[idx].actualDouble != nil {
+                                        Text(diff >= 0 ? "+\(String(format: "%.2f", diff))" : "\(String(format: "%.2f", diff))")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(diff >= 0 ? .green : .red)
+                                    }
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    TextField("Факт", text: $entries[idx].actual)
+                                        .keyboardType(.decimalPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 80)
+                                    Text(entries[idx].item.unit).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 4) {
-                                TextField("Факт", text: $entry.actual)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 80)
-                                    .padding(8)
-                                    .background(Color(.tertiarySystemGroupedBackground))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                Text(entry.item.unit).font(.caption).foregroundStyle(.secondary)
-                            }
                         }
-                    }
-                }
-
-                if filledCount > 0 {
-                    BigActionButton(title: "Применить расхождения", icon: "checkmark.rectangle.fill") {
-                        showApplyAlert = true
                     }
                 }
             }
-            .padding()
+
+            if discrepancyCount > 0 {
+                Section("Расхождения (\(discrepancyCount))") {
+                    ForEach(entries.filter { $0.hasDiscrepancy }) { entry in
+                        HStack {
+                            Text(entry.item.name)
+                            Spacer()
+                            if let diff = entry.difference {
+                                Text(diff >= 0 ? "+\(String(format: "%.2f", diff))" : "\(String(format: "%.2f", diff))")
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(diff >= 0 ? .green : .red)
+                                Text(entry.item.unit).foregroundStyle(.secondary).font(.caption)
+                            }
+                        }
+                    }
+                }
+            }
         }
-        .background(Color.chefBackground)
         .navigationTitle("Инвентаризация")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Отмена") { dismiss() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Провести") { showApplyAlert = true }
+                    .disabled(discrepancyCount == 0)
+            }
+        }
         .onAppear {
             if entries.isEmpty {
                 entries = store.inventoryItems.map { AuditEntry(item: $0) }
             }
+            if auditor.isEmpty { auditor = store.profile.name }
         }
-        .alert("Применить расхождения?", isPresented: $showApplyAlert) {
-            Button("Отмена", role: .cancel) {}
-            Button("Применить") { applyAudit() }
+        .confirmationDialog(
+            "Провести инвентаризацию?",
+            isPresented: $showApplyAlert,
+            titleVisibility: .visible
+        ) {
+            Button("Провести и скорректировать остатки", role: .destructive) {
+                applyAudit()
+                dismiss()
+            }
         } message: {
-            Text("Учётные остатки будут обновлены до фактических значений. Разницы спишутся как инвентаризация.")
+            Text("Будет создано \(discrepancyCount) записей корректировки")
         }
     }
 
     private func applyAudit() {
+        let df = DateFormatter()
+        df.dateStyle = .short
+        let dateStr = df.string(from: auditDate)
         for entry in entries {
             guard let actual = entry.actualDouble, entry.hasDiscrepancy,
                   let idx = store.inventoryItems.firstIndex(where: { $0.id == entry.item.id }) else { continue }
@@ -619,9 +756,9 @@ struct InventoryAuditView: View {
                 let wo = WriteOff(productName: entry.item.name,
                                   quantity: abs(diff),
                                   unit: entry.item.unit,
-                                  reason: "Инвентаризация",
-                                  employee: store.profile.name,
-                                  date: Date())
+                                  reason: "Инвентаризация \(dateStr)",
+                                  employee: auditor.isEmpty ? store.profile.name : auditor,
+                                  date: auditDate)
                 store.writeOffs.append(wo)
             }
             store.inventoryItems[idx].quantity = actual

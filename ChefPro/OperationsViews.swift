@@ -7,11 +7,14 @@ struct WriteOffsView: View {
     @State private var showAddWriteOff = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                if store.writeOffs.isEmpty {
+        Group {
+            if store.writeOffs.isEmpty {
+                ScrollView {
                     EmptyStateView(icon: "trash", title: "Списаний пока нет", subtitle: "Добавь первое списание продукта.")
-                } else {
+                        .padding(.vertical)
+                }
+            } else {
+                List {
                     ForEach(store.writeOffs.reversed()) { item in
                         BigCard {
                             VStack(alignment: .leading, spacing: 8) {
@@ -35,10 +38,19 @@ struct WriteOffsView: View {
                             }
                         }
                         .padding(.horizontal)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                store.writeOffs.removeAll { $0.id == item.id }
+                            } label: { Label("Удалить", systemImage: "trash") }
+                        }
                     }
                 }
+                .listStyle(.plain)
+                .background(Color.chefBackground)
             }
-            .padding(.vertical)
         }
         .background(Color.chefBackground)
         .navigationTitle("Списания")
@@ -327,6 +339,11 @@ struct ProductionPlanView: View {
                                 }
                             }
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                store.removePlanItem(item)
+                            } label: { Label("Удалить", systemImage: "trash") }
+                        }
                     }
 
                     BigActionButton(title: "Выполнить план", icon: "flame.fill") {
@@ -432,6 +449,7 @@ struct QuickProduceView: View {
 
     @State private var selectedDishID: UUID? = nil
     @State private var portions = 1
+    @State private var actualWeight = ""
     @State private var showError   = false
     @State private var showSuccess = false
 
@@ -459,6 +477,16 @@ struct QuickProduceView: View {
                         Stepper("Порций: \(portions)", value: $portions, in: 1...100)
                         Text("Себестоимость: \(store.calculateDishCost(dish) * Double(portions), specifier: "%.2f")")
                             .foregroundStyle(.chefAccent)
+                        HStack {
+                            Label("Фактический выход", systemImage: "scalemass")
+                                .font(.subheadline)
+                            Spacer()
+                            TextField("0", text: $actualWeight)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                            Text("г").foregroundStyle(.secondary)
+                        }
                     }
 
                     Section("Будет списано") {
@@ -498,6 +526,13 @@ struct QuickProduceView: View {
                     Button("Списать") {
                         guard let dish = selectedDish else { return }
                         let ok = store.produceDish(dish, portions: portions)
+                        if ok {
+                            if let w = Double(actualWeight.replacingOccurrences(of: ",", with: ".")), w > 0 {
+                                if let idx = store.productions.indices.last {
+                                    store.productions[idx].actualPortionWeight = w
+                                }
+                            }
+                        }
                         showError = !ok; showSuccess = ok
                         if ok { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { dismiss() } }
                     }
@@ -513,6 +548,14 @@ struct QuickProduceView: View {
 struct TemperatureLogView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showAdd = false
+
+    private func haccpViolation(log: TemperatureLog) -> Bool {
+        let loc = log.location.lowercased()
+        if loc.contains("холод") { return log.temperature > 8 }
+        if loc.contains("горяч") { return log.temperature < 60 }
+        if loc.contains("морозил") { return log.temperature > -15 }
+        return false
+    }
 
     private var locations: [String] {
         Array(Set(store.temperatureLogs.map { $0.location } + ["Холодильник 1", "Морозильник"])).sorted()
@@ -552,10 +595,18 @@ struct TemperatureLogView: View {
                 } else {
                     LazyVStack(spacing: 8) {
                         ForEach(store.temperatureLogs) { log in
+                            let isHACCP = haccpViolation(log: log)
                             BigCard {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(log.location).font(.headline)
+                                        HStack(spacing: 6) {
+                                            if isHACCP {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .foregroundStyle(.red)
+                                                    .font(.caption)
+                                            }
+                                            Text(log.location).font(.headline)
+                                        }
                                         Text(log.recordedAt.formatted(date: .abbreviated, time: .shortened))
                                             .font(.caption).foregroundStyle(.secondary)
                                         if !log.recordedBy.isEmpty {
@@ -563,6 +614,11 @@ struct TemperatureLogView: View {
                                         }
                                         if !log.notes.isEmpty {
                                             Text(log.notes).font(.caption).foregroundStyle(.secondary)
+                                        }
+                                        if isHACCP {
+                                            Text("⚠ Нарушение ХАССП")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.red)
                                         }
                                     }
                                     Spacer()
@@ -579,6 +635,8 @@ struct TemperatureLogView: View {
                                     }
                                 }
                             }
+                            .background(isHACCP ? Color.red.opacity(0.05) : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                             .padding(.horizontal)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
@@ -612,9 +670,128 @@ struct AddTemperatureLogView: View {
     @State private var useCustom = false
     @State private var temperature = ""
     @State private var notes = ""
-    let presetLocations = ["Холодильник 1", "Холодильник 2", "Морозильник", "Холодильник для напитков"]
+    @State private var showViolationAlert = false
+    @State private var pendingLog: TemperatureLog? = nil
+    @State private var showShareSheet = false
+    @State private var haccpPDFURL: URL? = nil
+    let presetLocations = ["Холодильник 1", "Холодильник 2", "Морозильник", "Горячее хранение", "Холодильник для напитков"]
 
     var finalLocation: String { useCustom ? customLocation : location }
+
+    func isHACCPViolation(location: String, temperature: Double) -> Bool {
+        let loc = location.lowercased()
+        if loc.contains("холод") { return temperature > 8 }
+        if loc.contains("горяч") { return temperature < 60 }
+        if loc.contains("морозил") { return temperature > -15 }
+        return false
+    }
+
+    func allowedRangeDescription(location: String) -> String {
+        let loc = location.lowercased()
+        if loc.contains("холод") { return "0°C … +8°C" }
+        if loc.contains("горяч") { return "+60°C … +75°C" }
+        if loc.contains("морозил") { return "-25°C … -15°C" }
+        return "согласно норме"
+    }
+
+    func generateHACCPAct(log: TemperatureLog) -> URL? {
+        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        let fileName = "HACCP_Act_\(Int(Date().timeIntervalSince1970)).pdf"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try renderer.writePDF(to: url) { context in
+                context.beginPage()
+                var y: CGFloat = 40
+
+                func drawText(_ text: String, size: CGFloat = 12, bold: Bool = false, x: CGFloat = 40, color: UIColor = .black) {
+                    let font = bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size)
+                    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                    let maxWidth: CGFloat = 515
+                    _ = CGRect(x: x, y: y, width: maxWidth, height: 400)
+                    let str = NSString(string: text)
+                    let boundingSize = str.boundingRect(with: CGSize(width: maxWidth, height: 400),
+                                                        options: .usesLineFragmentOrigin,
+                                                        attributes: attrs, context: nil).size
+                    str.draw(in: CGRect(x: x, y: y, width: maxWidth, height: boundingSize.height + 4), withAttributes: attrs)
+                    y += boundingSize.height + 6
+                }
+
+                func drawLine() {
+                    let path = UIBezierPath()
+                    path.move(to: CGPoint(x: 40, y: y))
+                    path.addLine(to: CGPoint(x: 555, y: y))
+                    UIColor.lightGray.setStroke()
+                    path.lineWidth = 0.5
+                    path.stroke()
+                    y += 10
+                }
+
+                drawText("АКТ ХАССП — Нарушение температурного режима", size: 18, bold: true)
+                y += 4
+                drawLine()
+                drawText(store.restaurantName, size: 13, bold: true)
+                y += 8
+
+                drawText("Дата составления: \(log.recordedAt.formatted(date: .long, time: .omitted))", size: 12)
+                drawText("Время фиксации: \(log.recordedAt.formatted(date: .omitted, time: .shortened))", size: 12)
+                drawText("Место хранения: \(log.location)", size: 12)
+                drawText("Измеренная температура: \(String(format: "%.1f", log.temperature))°C", size: 13, bold: true, color: .systemRed)
+                drawText("Допустимый диапазон: \(allowedRangeDescription(location: log.location))", size: 12)
+                drawText("Ответственный сотрудник: \(log.recordedBy.isEmpty ? store.profile.name : log.recordedBy)", size: 12)
+                if !log.notes.isEmpty {
+                    drawText("Примечание: \(log.notes)", size: 12)
+                }
+                y += 10
+                drawLine()
+
+                drawText("Продукты, подлежащие списанию:", size: 14, bold: true)
+                y += 4
+
+                let locationLower = log.location.lowercased()
+                let categoryKeyword: String
+                if locationLower.contains("морозил") {
+                    categoryKeyword = "заморо"
+                } else if locationLower.contains("горяч") {
+                    categoryKeyword = "горяч"
+                } else {
+                    categoryKeyword = ""
+                }
+
+                let suggestedItems = categoryKeyword.isEmpty ? [] : store.inventoryItems.filter {
+                    $0.category.lowercased().contains(categoryKeyword) || $0.name.lowercased().contains(categoryKeyword)
+                }
+
+                if suggestedItems.isEmpty {
+                    for _ in 0..<6 {
+                        drawText("_______________________________________________________   количество: ____________", size: 11)
+                        y += 2
+                    }
+                } else {
+                    for item in suggestedItems.prefix(8) {
+                        drawText("• \(item.name)   (\(String(format: "%.2f", item.quantity)) \(item.unit))  → кол-во к списанию: ____________", size: 11)
+                        y += 2
+                    }
+                    for _ in suggestedItems.count..<max(suggestedItems.count, 3) {
+                        drawText("_______________________________________________________   количество: ____________", size: 11)
+                        y += 2
+                    }
+                }
+
+                y += 12
+                drawLine()
+                drawText("Ответственный: ___________________________________________", size: 12)
+                y += 8
+                drawText("Подпись: _______________    Дата: _______________", size: 12)
+                y += 20
+                drawText("Акт составлен автоматически системой ChefPro", size: 10, color: .gray)
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -663,10 +840,35 @@ struct AddTemperatureLogView: View {
                             let gen = UINotificationFeedbackGenerator()
                             gen.notificationOccurred(.warning)
                         }
-                        dismiss()
+                        if isHACCPViolation(location: finalLocation, temperature: t) {
+                            pendingLog = log
+                            showViolationAlert = true
+                        } else {
+                            dismiss()
+                        }
                     }
                     .disabled(Double(temperature.replacingOccurrences(of: ",", with: ".")) == nil ||
                               finalLocation.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .alert("Нарушение температурного режима!", isPresented: $showViolationAlert) {
+                Button("Создать акт списания") {
+                    if let log = pendingLog, let url = generateHACCPAct(log: log) {
+                        haccpPDFURL = url
+                        showShareSheet = true
+                    } else {
+                        dismiss()
+                    }
+                }
+                Button("Пропустить", role: .cancel) { dismiss() }
+            } message: {
+                if let log = pendingLog {
+                    Text("Температура \(String(format: "%.1f", log.temperature))°C в «\(log.location)» выходит за допустимые пределы (\(allowedRangeDescription(location: log.location))). Создать акт ХАССП для списания продуктов?")
+                }
+            }
+            .sheet(isPresented: $showShareSheet, onDismiss: { dismiss() }) {
+                if let url = haccpPDFURL {
+                    ShareSheet(items: [url])
                 }
             }
         }

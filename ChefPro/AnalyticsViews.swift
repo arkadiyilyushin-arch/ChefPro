@@ -4,6 +4,7 @@ import Charts
 // MARK: - Reports helpers
 
 struct ProductionRowCard: View {
+    @EnvironmentObject var store: ChefProStore
     let item: Production
 
     var body: some View {
@@ -15,8 +16,19 @@ struct ProductionRowCard: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(item.totalCost, specifier: "%.2f")")
-                    .bold().foregroundStyle(Color.chefAccent)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(item.totalCost, specifier: "%.2f")")
+                        .bold().foregroundStyle(Color.chefAccent)
+                    let expectedWeight = store.dishes.first(where: { $0.name == item.dishName })?.portionWeight ?? 0
+                    let actual = item.actualPortionWeight
+                    if actual > 0 && expectedWeight > 0 {
+                        let deviation = (actual - expectedWeight) / expectedWeight * 100
+                        let color: Color = abs(deviation) > 10 ? .red : .green
+                        Label("\(String(format: "%+.0f", deviation))%", systemImage: "scalemass")
+                            .font(.caption.bold())
+                            .foregroundStyle(color)
+                    }
+                }
             }
         }
     }
@@ -685,6 +697,7 @@ struct CSVExportView: View {
         case writeOffs   = "Списания"
         case deliveries  = "Приёмки"
         case inventory   = "Склад"
+        case dishes      = "Техкарты"
         var id: String { rawValue }
     }
     @State private var selected: CSVType = .sales
@@ -735,8 +748,15 @@ struct CSVExportView: View {
                 "\($0.supplier),\($0.productName),\(String(format: "%.2f",$0.quantity)),\($0.unit),\(String(format: "%.2f",$0.price)),\($0.acceptedBy),\($0.date.formatted()),\($0.notes)"
             }
         case .inventory:
-            lines = ["Название,Категория,Количество,Единица,Мин.остаток,Цена/ед,Статус"] + store.inventoryItems.map {
-                "\($0.name),\($0.category),\(String(format: "%.2f",$0.quantity)),\($0.unit),\(String(format: "%.2f",$0.minQuantity)),\(String(format: "%.2f",$0.pricePerUnit)),\($0.isLowStock ? "Заканчивается" : "OK")"
+            lines = ["Название;Категория;Количество;Единица;Мин.остаток;Цена/ед;Стоимость;Штрихкод"] + store.inventoryItems.map {
+                let cost = $0.quantity * $0.pricePerUnit
+                return "\($0.name);\($0.category);\(String(format: "%.2f",$0.quantity));\($0.unit);\(String(format: "%.2f",$0.minQuantity));\(String(format: "%.2f",$0.pricePerUnit));\(String(format: "%.2f",cost));\($0.barcode)"
+            }
+        case .dishes:
+            lines = ["Название;Категория;Цена продажи;Себестоимость;Food Cost %;Статус"] + store.dishes.map {
+                let cost = store.calculateDishCost($0)
+                let fc = $0.salePrice > 0 ? (cost / $0.salePrice * 100) : 0
+                return "\($0.name);\($0.category);\(String(format: "%.2f",$0.salePrice));\(String(format: "%.2f",cost));\(String(format: "%.1f",fc));\($0.menuStatus.rawValue)"
             }
         }
         let csv = lines.joined(separator: "\n")

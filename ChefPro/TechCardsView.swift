@@ -775,6 +775,7 @@ struct AddDishView: View {
     @Environment(\.dismiss) var dismiss
     @State private var name = ""
     @State private var category = ""
+    @State private var salePrice = ""
     @State private var ingredients: [RecipeIngredient] = []
     @State private var allergens: [String] = []
     @State private var cookTime: Int = 0
@@ -801,6 +802,7 @@ struct AddDishView: View {
             DishEditorForm(
                 name: $name,
                 category: $category,
+                salePrice: $salePrice,
                 ingredients: $ingredients,
                 allergens: $allergens,
                 cookTime: $cookTime,
@@ -825,7 +827,7 @@ struct AddDishView: View {
                         var dish = Dish(
                             name: name,
                             category: category,
-                            salePrice: 0,
+                            salePrice: parsePositiveDouble(salePrice) ?? 0,
                             ingredients: ingredients,
                             allergens: allergens,
                             cookTime: cookTime,
@@ -864,6 +866,7 @@ struct EditDishView: View {
 
     @State private var name: String
     @State private var category: String
+    @State private var salePrice: String
     @State private var ingredients: [RecipeIngredient]
     @State private var allergens: [String]
     @State private var cookTime: Int
@@ -885,6 +888,7 @@ struct EditDishView: View {
         self.onSave = onSave
         _name        = State(initialValue: dish.name)
         _category    = State(initialValue: dish.category)
+        _salePrice   = State(initialValue: dish.salePrice > 0 ? String(dish.salePrice) : "")
         _ingredients = State(initialValue: dish.ingredients)
         _allergens   = State(initialValue: dish.allergens)
         _cookTime    = State(initialValue: dish.cookTime)
@@ -909,6 +913,7 @@ struct EditDishView: View {
             DishEditorForm(
                 name: $name,
                 category: $category,
+                salePrice: $salePrice,
                 ingredients: $ingredients,
                 allergens: $allergens,
                 cookTime: $cookTime,
@@ -937,7 +942,7 @@ struct EditDishView: View {
                             id: dish.id,
                             name: name,
                             category: category,
-                            salePrice: dish.salePrice,   // preserve existing value
+                            salePrice: parsePositiveDouble(salePrice) ?? dish.salePrice,
                             ingredients: ingredients,
                             allergens: allergens,
                             cookTime: cookTime,
@@ -981,6 +986,7 @@ struct DishEditorForm: View {
     @EnvironmentObject var store: ChefProStore
     @Binding var name: String
     @Binding var category: String
+    @Binding var salePrice: String
     @Binding var ingredients: [RecipeIngredient]
     @Binding var allergens: [String]
     @Binding var cookTime: Int
@@ -1059,6 +1065,8 @@ struct DishEditorForm: View {
             Section("Основная информация") {
                 TextField("Название блюда", text: $name)
                 TextField("Категория", text: $category)
+                TextField("Цена продажи", text: $salePrice)
+                    .keyboardType(.decimalPad)
                 Stepper(cookTime == 0 ? "Время готовки: не задано" : "Время готовки: \(cookTime) мин",
                         value: $cookTime, in: 0...180, step: 5)
                 Picker("Статус в меню", selection: $menuStatus) {

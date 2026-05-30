@@ -199,6 +199,7 @@ struct InventoryView: View {
             }
             .sheet(isPresented: $showAddItem) {
                 AddInventoryItemView { store.inventoryItems.append($0) }
+                    .environmentObject(store)
             }
             .sheet(isPresented: $showAudit) {
                 NavigationStack {
@@ -408,6 +409,7 @@ struct QuickWriteOffView: View {
 }
 
 struct AddInventoryItemView: View {
+    @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) var dismiss
     @State private var name            = ""
     @State private var category        = ""
@@ -421,6 +423,7 @@ struct AddInventoryItemView: View {
     @State private var orderUnit       = ""
     @State private var orderUnitRatio  = ""
     @State private var showScanner     = false
+    @State private var showSuggestions = false
 
     var onSave: (InventoryItem) -> Void
     let units = ["кг", "г", "л", "мл", "шт"]
@@ -437,6 +440,20 @@ struct AddInventoryItemView: View {
             Form {
                 Section("Продукт") {
                     TextField("Название продукта", text: $name)
+                        .onChange(of: name) { _, _ in
+                            showSuggestions = !name.trimmingCharacters(in: .whitespaces).isEmpty
+                        }
+                    InventoryProductSuggestions(query: name, show: $showSuggestions) { item in
+                        name         = item.name
+                        category     = item.category
+                        unit         = item.unit
+                        if pricePerUnit.isEmpty && item.pricePerUnit > 0 {
+                            pricePerUnit = String(format: "%.2f", item.pricePerUnit)
+                        }
+                        if minQuantity.isEmpty && item.minQuantity > 0 {
+                            minQuantity = String(format: "%.1f", item.minQuantity)
+                        }
+                    }
                     TextField("Категория", text: $category)
                     Picker("Единица хранения", selection: $unit) {
                         ForEach(units, id: \.self) { Text($0) }

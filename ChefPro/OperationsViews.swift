@@ -62,17 +62,20 @@ struct WriteOffsView: View {
         }
         .sheet(isPresented: $showAddWriteOff) {
             AddWriteOffView { store.addWriteOff($0) }
+                .environmentObject(store)
         }
     }
 }
 
 struct AddWriteOffView: View {
+    @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) var dismiss
-    @State private var productName = ""
-    @State private var quantity = ""
-    @State private var unit = "кг"
-    @State private var reason = "Порча"
-    @State private var employee = ""
+    @State private var productName     = ""
+    @State private var quantity        = ""
+    @State private var unit            = "кг"
+    @State private var reason          = "Порча"
+    @State private var employee        = ""
+    @State private var showSuggestions = false
 
     var onSave: (WriteOff) -> Void
     let units = ["кг", "г", "л", "мл", "шт"]
@@ -89,6 +92,17 @@ struct AddWriteOffView: View {
             Form {
                 Section("Продукт") {
                     TextField("Название продукта", text: $productName)
+                        .onChange(of: productName) { _, _ in
+                            showSuggestions = !productName.trimmingCharacters(in: .whitespaces).isEmpty
+                        }
+                    InventoryProductSuggestions(query: productName, show: $showSuggestions) { item in
+                        productName = item.name
+                        unit        = item.unit
+                        // Pre-fill quantity with current stock so user can adjust
+                        if quantity.isEmpty {
+                            quantity = String(format: "%.1f", item.quantity)
+                        }
+                    }
                     TextField("Количество", text: $quantity).keyboardType(.decimalPad)
                     Picker("Единица", selection: $unit) {
                         ForEach(units, id: \.self) { Text($0) }
@@ -127,6 +141,7 @@ struct AddWriteOffView: View {
                 }
             }
         }
+        .onAppear { if employee.isEmpty { employee = store.profile.name } }
     }
 }
 

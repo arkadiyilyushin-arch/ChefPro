@@ -20,6 +20,7 @@ final class ChefProStore: ObservableObject {
     @Published var inventoryItems: [InventoryItem] = [] { didSet { saveData() } }
     @Published var deliveries: [Delivery] = [] { didSet { saveData() } }
     @Published var writeOffs: [WriteOff] = [] { didSet { saveData() } }
+    @Published var extraPurchaseItems: [ExtraPurchaseItem] = [] { didSet { saveData() } }
     @Published var productions: [Production] = [] { didSet { saveData() } }
     @Published var employees: [Employee] = [] { didSet { saveData() } }
     @Published var currentEmployeeID: UUID? = nil { didSet { saveData() } }
@@ -73,7 +74,8 @@ final class ChefProStore: ObservableObject {
     private let dishesKey = "chefpro_dishes_v2"
     private let inventoryKey = "chefpro_inventory_v2"
     private let deliveriesKey = "chefpro_deliveries_v2"
-    private let writeOffsKey = "chefpro_writeoffs_v2"
+    private let writeOffsKey          = "chefpro_writeoffs_v2"
+    private let extraPurchaseItemsKey = "chefpro_extra_purchases_v1"
     private let productionsKey = "chefpro_productions_v1"
     private let profileKey = "chefpro_profile_v2"
     private let employeesKey = "chefpro_employees_v2"
@@ -1183,6 +1185,17 @@ final class ChefProStore: ObservableObject {
         }
     }
 
+    // MARK: Extra purchase items (manual additions to purchase order)
+    func addExtraPurchaseItem(_ item: ExtraPurchaseItem) {
+        extraPurchaseItems.append(item)
+    }
+    func removeExtraPurchaseItem(_ item: ExtraPurchaseItem) {
+        extraPurchaseItems.removeAll { $0.id == item.id }
+    }
+    func clearExtraPurchaseItems() {
+        extraPurchaseItems.removeAll()
+    }
+
     func addWriteOff(_ writeOff: WriteOff) {
         haptic(.medium)
         writeOffs.append(writeOff)
@@ -1487,7 +1500,8 @@ final class ChefProStore: ObservableObject {
         save(dishes, key: dishesKey)
         save(inventoryItems, key: inventoryKey)
         save(deliveries, key: deliveriesKey)
-        save(writeOffs, key: writeOffsKey)
+        save(writeOffs,             key: writeOffsKey)
+        save(extraPurchaseItems,    key: extraPurchaseItemsKey)
         save(productions, key: productionsKey)
         save(profile, key: profileKey)
         save(employees, key: employeesKey)
@@ -1632,7 +1646,8 @@ final class ChefProStore: ObservableObject {
         dishes = load([Dish].self, key: dishesKey) ?? []
         inventoryItems = load([InventoryItem].self, key: inventoryKey) ?? []
         deliveries = load([Delivery].self, key: deliveriesKey) ?? []
-        writeOffs = load([WriteOff].self, key: writeOffsKey) ?? []
+        writeOffs            = load([WriteOff].self,            key: writeOffsKey)          ?? []
+        extraPurchaseItems   = load([ExtraPurchaseItem].self,   key: extraPurchaseItemsKey) ?? []
         productions = load([Production].self, key: productionsKey) ?? []
         profile = load(UserProfile.self, key: profileKey) ?? profile
         employees = load([Employee].self, key: employeesKey) ?? []

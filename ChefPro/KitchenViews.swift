@@ -428,62 +428,237 @@ struct PurchaseItemCard: View {
 
 struct PurchasesView: View {
     @EnvironmentObject var store: ChefProStore
-    @State private var showShare = false
-    @State private var orderText = ""
+    @State private var showShare   = false
+    @State private var showAddItem = false
+    @State private var orderText   = ""
+
+    private var totalCount: Int { store.purchaseList.count + store.extraPurchaseItems.count }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+
                 InfoCard(
                     title: "К заказу",
-                    value: "\(store.purchaseList.count)",
-                    subtitle: "позиций",
+                    value: "\(totalCount)",
+                    subtitle: store.extraPurchaseItems.isEmpty
+                        ? "позиций (нехватка на складе)"
+                        : "\(store.purchaseList.count) авто + \(store.extraPurchaseItems.count) вручную",
                     icon: "cart.fill"
                 )
 
-                if store.purchaseList.isEmpty {
-                    EmptyStateView(
-                        icon: "checkmark.circle",
-                        title: "Закупки не нужны",
-                        subtitle: "Все продукты выше минимального остатка."
-                    )
-                } else {
+                // ── Авто-список (нехватка) ────────────────────────
+                if !store.purchaseList.isEmpty {
+                    sectionHeader("Нехватка на складе", systemImage: "exclamationmark.triangle.fill", color: .orange)
                     ForEach(store.purchaseList) { item in
                         PurchaseItemCard(item: item)
                     }
+                }
 
+                // ── Добавленные вручную ───────────────────────────
+                if !store.extraPurchaseItems.isEmpty {
+                    sectionHeader("Добавлено вручную", systemImage: "pencil.circle.fill", color: .blue)
+                    ForEach(store.extraPurchaseItems) { item in
+                        extraItemCard(item)
+                    }
+                }
+
+                // ── Empty state ───────────────────────────────────
+                if totalCount == 0 {
+                    EmptyStateView(
+                        icon: "checkmark.circle",
+                        title: "Закупки не нужны",
+                        subtitle: "Все продукты выше минимального остатка.\nДобавьте позиции вручную если нужно."
+                    )
+                }
+
+                // ── Action buttons ────────────────────────────────
+                if totalCount > 0 {
                     BigActionButton(title: "Сформировать заявку", icon: "square.and.arrow.up") {
                         orderText = buildOrderText()
                         showShare = true
                     }
+
+                    if !store.extraPurchaseItems.isEmpty {
+                        Button(role: .destructive) {
+                            store.clearExtraPurchaseItems()
+                        } label: {
+                            Label("Очистить ручные позиции", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                    }
                 }
+
+                Spacer(minLength: 40)
             }
             .padding()
         }
         .background(Color.chefBackground)
         .navigationTitle("Закупки")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAddItem = true
+                } label: {
+                    Image(systemName: "plus.circle.fill").font(.title2)
+                }
+            }
+        }
         .sheet(isPresented: $showShare) {
             ShareSheet(items: [orderText])
         }
+        .sheet(isPresented: $showAddItem) {
+            AddExtraPurchaseItemView { item in
+                store.addExtraPurchaseItem(item)
+            }
+            .environmentObject(store)
+        }
     }
+
+    // MARK: - Subviews
+
+    private func sectionHeader(_ title: String, systemImage: String, color: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.subheadline.bold())
+            .foregroundStyle(color)
+            .padding(.top, 4)
+    }
+
+    private func extraItemCard(_ item: ExtraPurchaseItem) -> some View {
+        BigCard {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name).font(.headline)
+                    if !item.note.isEmpty {
+                        Text(item.note).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.blue)
+                    Text("вручную").font(.caption2).foregroundStyle(.secondary)
+                }
+                Button {
+                    store.removeExtraPurchaseItem(item)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red.opacity(0.7))
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Order text
 
     private func buildOrderText() -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "ru_RU")
         df.dateFormat = "d MMMM yyyy"
         var lines = ["Заявка на закупку — \(store.restaurantName)", "Дата: \(df.string(from: Date()))", ""]
-        for item in store.purchaseList {
-            let neededStorage = max(0, item.minQuantity - item.quantity)
-            if !item.orderUnit.isEmpty && item.orderUnitRatio > 0 {
-                let neededOrder = (neededStorage / item.orderUnitRatio).rounded(.up)
-                lines.append("• \(item.name): \(String(format: "%.0f", neededOrder)) \(item.orderUnit)  (≈\(String(format: "%.1f", neededStorage)) \(item.unit), остаток: \(String(format: "%.1f", item.quantity)) \(item.unit))")
-            } else {
-                lines.append("• \(item.name): \(String(format: "%.1f", neededStorage)) \(item.unit)  (остаток: \(String(format: "%.1f", item.quantity)) \(item.unit), мин: \(String(format: "%.1f", item.minQuantity)) \(item.unit))")
+
+        if !store.purchaseList.isEmpty {
+            lines.append("=== Нехватка на складе ===")
+            for item in store.purchaseList {
+                let neededStorage = max(0, item.minQuantity - item.quantity)
+                if !item.orderUnit.isEmpty && item.orderUnitRatio > 0 {
+                    let neededOrder = (neededStorage / item.orderUnitRatio).rounded(.up)
+                    lines.append("• \(item.name): \(String(format: "%.0f", neededOrder)) \(item.orderUnit)  (≈\(String(format: "%.1f", neededStorage)) \(item.unit), остаток: \(String(format: "%.1f", item.quantity)) \(item.unit))")
+                } else {
+                    lines.append("• \(item.name): \(String(format: "%.1f", neededStorage)) \(item.unit)  (остаток: \(String(format: "%.1f", item.quantity)) \(item.unit), мин: \(String(format: "%.1f", item.minQuantity)) \(item.unit))")
+                }
+            }
+            lines.append("")
+        }
+
+        if !store.extraPurchaseItems.isEmpty {
+            lines.append("=== Добавлено вручную ===")
+            for item in store.extraPurchaseItems {
+                var line = "• \(item.name): \(String(format: "%.1f", item.quantity)) \(item.unit)"
+                if !item.note.isEmpty { line += "  (\(item.note))" }
+                lines.append(line)
+            }
+            lines.append("")
+        }
+
+        lines.append("Итого позиций: \(totalCount)")
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Add Extra Purchase Item
+
+struct AddExtraPurchaseItemView: View {
+    @EnvironmentObject var store: ChefProStore
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (ExtraPurchaseItem) -> Void
+
+    @State private var name     = ""
+    @State private var quantity = ""
+    @State private var unit     = "кг"
+    @State private var note     = ""
+    @State private var showSuggestions = false
+
+    let units = ["кг", "г", "л", "мл", "шт", "порц", "уп", "ящ"]
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
+        parsePositiveDouble(quantity) != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Продукт") {
+                    TextField("Название", text: $name)
+                        .onChange(of: name) { _, _ in
+                            showSuggestions = !name.trimmingCharacters(in: .whitespaces).isEmpty
+                        }
+                    InventoryProductSuggestions(query: name, show: $showSuggestions) { item in
+                        name = item.name
+                        unit = item.unit
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField("Количество", text: $quantity)
+                            .keyboardType(.decimalPad)
+                        Picker("", selection: $unit) {
+                            ForEach(units, id: \.self) { Text($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 80)
+                    }
+                }
+
+                Section("Примечание") {
+                    TextField("Комментарий (необязательно)", text: $note, axis: .vertical)
+                        .lineLimit(2...3)
+                }
+            }
+            .navigationTitle("Добавить к заказу")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Добавить") {
+                        let item = ExtraPurchaseItem(
+                            name:     name.trimmingCharacters(in: .whitespaces),
+                            quantity: parsePositiveDouble(quantity) ?? 0,
+                            unit:     unit,
+                            note:     note.trimmingCharacters(in: .whitespaces)
+                        )
+                        onSave(item)
+                        dismiss()
+                    }
+                    .disabled(!canSave)
+                }
             }
         }
-        lines.append("")
-        lines.append("Итого позиций: \(store.purchaseList.count)")
-        return lines.joined(separator: "\n")
     }
 }
 

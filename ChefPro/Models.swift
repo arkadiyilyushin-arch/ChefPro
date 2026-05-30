@@ -140,6 +140,16 @@ struct Delivery: Identifiable, Codable {
     var notes: String = ""
 }
 
+/// Manually added item in the purchase order (not tied to inventory low-stock).
+struct ExtraPurchaseItem: Identifiable, Codable {
+    var id       = UUID()
+    var name:     String
+    var quantity: Double
+    var unit:     String
+    var note:     String = ""
+    var addedAt:  Date   = Date()
+}
+
 struct WriteOff: Identifiable, Codable {
     var id = UUID()
     var productName: String

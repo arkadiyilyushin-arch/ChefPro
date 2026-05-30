@@ -32,7 +32,7 @@ final class RestaurantManager: ObservableObject {
 
     func add(_ r: RestaurantProfile) {
         restaurants.append(r)
-        if restaurants.count == 1 { activeID = r.id }
+        activeID = r.id   // always switch to the newly created restaurant
         save()
     }
 
@@ -129,6 +129,7 @@ struct RestaurantSwitcherView: View {
             .sheet(isPresented: $showAdd) {
                 AddRestaurantView { r in
                     manager.add(r)
+                    store.restaurantName = r.name
                 }
             }
         }

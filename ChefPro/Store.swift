@@ -976,25 +976,65 @@ final class ChefProStore: ObservableObject {
                 $0.name.lowercased() == ingredient.productName.lowercased()
             }) {
                 let sfCost = calculateDishCost(semifinished)  // recursive call
-                let weight = semifinished.portionWeight > 0 ? semifinished.portionWeight : 1.0
+                // FIX: convert portionWeight to the same unit as the ingredient quantity
+                let weightInIngredientUnit = convert(
+                    quantity: semifinished.portionWeight,
+                    from: semifinished.portionWeightUnit,
+                    to: ingredient.unit
+                )
+                let weight: Double
+                if weightInIngredientUnit > 0 {
+                    weight = weightInIngredientUnit
+                } else {
+                    weight = semifinished.portionWeight > 0 ? semifinished.portionWeight : 1.0
+                }
                 let rawQty = ingredient.yieldFactor > 0 ? ingredient.quantity / ingredient.yieldFactor : ingredient.quantity
                 return total + (rawQty / weight) * sfCost
             }
-            // 2. Otherwise look up inventory item
-            guard let item = inventoryItems.first(where: {
+            // 2. Otherwise look up inventory item (try exact match first, then partial)
+            let exactItem = inventoryItems.first(where: {
                 $0.name.lowercased() == ingredient.productName.lowercased()
-            }) else {
-                return total
-            }
+            })
+            let item = exactItem ?? inventoryItems.first(where: {
+                $0.name.lowercased().contains(ingredient.productName.lowercased()) ||
+                ingredient.productName.lowercased().contains($0.name.lowercased())
+            })
+            guard let item else { return total }
             let rawQty = ingredient.yieldFactor > 0 ? ingredient.quantity / ingredient.yieldFactor : ingredient.quantity
             let convertedQuantity = convert(quantity: rawQty, from: ingredient.unit, to: item.unit)
             return total + (convertedQuantity * item.pricePerUnit)
         }
     }
 
+    /// Food cost % = cost / salePrice × 100.
+    /// Returns 0 when salePrice is not set (use hasFoodCostPercent to check before displaying).
     func foodCostPercent(_ dish: Dish) -> Double {
         guard dish.salePrice > 0 else { return 0 }
-        return calculateDishCost(dish) / dish.salePrice * 100
+        let cost = calculateDishCost(dish)
+        guard cost > 0 else { return 0 }
+        return cost / dish.salePrice * 100
+    }
+
+    /// True only when salePrice is set and ingredient cost is known — use before displaying FC%.
+    func hasFoodCostPercent(_ dish: Dish) -> Bool {
+        dish.salePrice > 0 && calculateDishCost(dish) > 0
+    }
+
+    /// Names of ingredients in the dish that couldn't be matched to any inventory item.
+    func unmatchedIngredients(for dish: Dish) -> [String] {
+        dish.ingredients.compactMap { ingredient in
+            let isSemifinished = dishes.contains(where: {
+                $0.dishType == .semifinished &&
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            })
+            if isSemifinished { return nil }
+            let found = inventoryItems.contains(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased() ||
+                $0.name.lowercased().contains(ingredient.productName.lowercased()) ||
+                ingredient.productName.lowercased().contains($0.name.lowercased())
+            })
+            return found ? nil : ingredient.productName
+        }
     }
 
     func canProduce(dish: Dish, portions: Int) -> Bool {

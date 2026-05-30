@@ -60,7 +60,7 @@ struct DishRowCard: View {
 
                 Spacer()
 
-                if dish.dishType != .semifinished {
+                if dish.dishType != .semifinished && dish.salePrice > 0 {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text("\(foodCostPct, specifier: "%.0f")%")
                             .font(.title3).bold().foregroundStyle(fcColor)
@@ -329,7 +329,7 @@ struct DishDetailView: View {
 
                             Spacer()
 
-                            if currentDish.dishType != .semifinished {
+                            if currentDish.dishType != .semifinished && store.hasFoodCostPercent(currentDish) {
                                 VStack(alignment: .trailing) {
                                     Text("Food cost")
                                         .font(.caption)
@@ -338,6 +338,22 @@ struct DishDetailView: View {
                                         .font(.title2)
                                         .bold()
                                         .foregroundStyle(.chefAccent)
+                                }
+                            }
+                        }
+
+                        // Предупреждение об ингредиентах не найденных на складе
+                        let missing = store.unmatchedIngredients(for: currentDish)
+                        if !missing.isEmpty {
+                            Divider()
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label("Не найдено на складе — себестоимость занижена", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.orange)
+                                ForEach(missing, id: \.self) { name in
+                                    Text("· \(name)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }

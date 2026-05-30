@@ -124,7 +124,8 @@ struct WaiterOrderSheet: View {
     let tableNumber: Int
     @State private var selectedDish: Dish? = nil
     @State private var portions = 1
-    @State private var note = ""
+    @State private var course   = 1
+    @State private var note     = ""
     @State private var searchText = ""
     @State private var sentOrders: [KitchenOrder] = []
 
@@ -151,6 +152,8 @@ struct WaiterOrderSheet: View {
                                         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                                         Text(order.dishName)
                                         Text("×\(order.portions)").foregroundStyle(.secondary)
+                                        Text("·").foregroundStyle(.secondary)
+                                        Text(order.courseName).foregroundStyle(.orange)
                                     }
                                     .font(.caption)
                                     .padding(.horizontal, 10)
@@ -195,6 +198,11 @@ struct WaiterOrderSheet: View {
                     if let dish = selectedDish {
                         Section("Заказ — \(dish.name)") {
                             Stepper("Порций: \(portions)", value: $portions, in: 1...20)
+                            Picker("Курс подачи", selection: $course) {
+                                ForEach(Array(KitchenOrder.courseNames.sorted(by: { $0.key < $1.key })), id: \.key) { key, name in
+                                    Text(name).tag(key)
+                                }
+                            }
                             TextField("Комментарий (аллергии, пожелания…)", text: $note, axis: .vertical)
                                 .lineLimit(2...3)
                         }
@@ -233,6 +241,7 @@ struct WaiterOrderSheet: View {
             portions: portions,
             tableNumber: "\(tableNumber)",
             note: note,
+            course: course,
             status: .new,
             createdAt: Date()
         )
@@ -241,5 +250,6 @@ struct WaiterOrderSheet: View {
         selectedDish = nil
         portions = 1
         note = ""
+        // keep course as-is — usually next dish is same course
     }
 }

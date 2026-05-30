@@ -110,11 +110,13 @@ struct TableReservationView: View {
                 AddReservationView(presetDate: selectedDate) { res in
                     store.addReservation(res)
                 }
+                .environmentObject(store)
             }
             .sheet(item: $editingReservation) { res in
                 EditReservationView(reservation: res) { updated in
                     store.updateReservation(updated)
                 }
+                .environmentObject(store)
             }
         }
     }
@@ -222,22 +224,38 @@ struct AddReservationView: View {
     let presetDate: Date
     let onSave: (TableReservation) -> Void
 
+    @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) private var dismiss
-    @State private var guestName  = ""
-    @State private var guestPhone = ""
+    @State private var guestName   = ""
+    @State private var guestPhone  = ""
     @State private var tableNumber = ""
-    @State private var persons = 2
+    @State private var persons     = 2
     @State private var date: Date
-    @State private var duration = 120
-    @State private var notes = ""
+    @State private var duration    = 120
+    @State private var notes       = ""
 
     init(presetDate: Date, onSave: @escaping (TableReservation) -> Void) {
         self.presetDate = presetDate
         self.onSave = onSave
-        // Set to the preset date at 19:00
         var comps = Calendar.current.dateComponents([.year, .month, .day], from: presetDate)
         comps.hour = 19; comps.minute = 0
         _date = State(initialValue: Calendar.current.date(from: comps) ?? presetDate)
+    }
+
+    // Conflict: same table, overlapping time, not cancelled
+    private var conflictingReservation: TableReservation? {
+        guard !tableNumber.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let endDate = date.addingTimeInterval(Double(duration) * 60)
+        return store.reservations.first { existing in
+            existing.tableNumber == tableNumber &&
+            existing.status != .cancelled &&
+            date < existing.endDate &&
+            endDate > existing.date
+        }
+    }
+
+    private var canSave: Bool {
+        !guestName.isEmpty && conflictingReservation == nil
     }
 
     var body: some View {
@@ -266,6 +284,26 @@ struct AddReservationView: View {
                     }
                 }
 
+                // Conflict warning
+                if let conflict = conflictingReservation {
+                    Section {
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Стол уже забронирован")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.red)
+                                let f = DateFormatter()
+                                let _ = { f.dateFormat = "HH:mm" }()
+                                Text("\(conflict.guestName) · \(f.string(from: conflict.date))–\(f.string(from: conflict.endDate))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
                 Section("Комментарий") {
                     TextField("Пожелания, аллергии…", text: $notes, axis: .vertical)
                         .lineLimit(3)
@@ -279,7 +317,6 @@ struct AddReservationView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Сохранить") {
-                        guard !guestName.isEmpty else { return }
                         let res = TableReservation(
                             guestName: guestName,
                             guestPhone: guestPhone,
@@ -292,7 +329,7 @@ struct AddReservationView: View {
                         onSave(res)
                         dismiss()
                     }
-                    .disabled(guestName.isEmpty)
+                    .disabled(!canSave)
                 }
             }
         }
@@ -305,6 +342,7 @@ struct EditReservationView: View {
     let reservation: TableReservation
     let onSave: (TableReservation) -> Void
 
+    @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) private var dismiss
     @State private var res: TableReservation
 
@@ -312,6 +350,18 @@ struct EditReservationView: View {
         self.reservation = reservation
         self.onSave = onSave
         _res = State(initialValue: reservation)
+    }
+
+    // Conflict: same table, overlapping time, excluding self, not cancelled
+    private var conflictingReservation: TableReservation? {
+        let endDate = res.endDate
+        return store.reservations.first { existing in
+            existing.id != reservation.id &&
+            existing.tableNumber == res.tableNumber &&
+            existing.status != .cancelled &&
+            res.date < existing.endDate &&
+            endDate > existing.date
+        }
     }
 
     var body: some View {
@@ -338,6 +388,27 @@ struct EditReservationView: View {
                         Text("3 часа").tag(180)
                     }
                 }
+
+                // Conflict warning
+                if let conflict = conflictingReservation {
+                    Section {
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Стол уже забронирован")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.red)
+                                let f = DateFormatter()
+                                let _ = { f.dateFormat = "HH:mm" }()
+                                Text("\(conflict.guestName) · \(f.string(from: conflict.date))–\(f.string(from: conflict.endDate))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
                 Section("Статус") {
                     Picker("Статус", selection: $res.status) {
                         ForEach(ReservationStatus.allCases, id: \.self) {
@@ -353,9 +424,10 @@ struct EditReservationView: View {
             .navigationTitle("Редактировать бронь")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction)  { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Сохранить") { onSave(res); dismiss() }
+                        .disabled(conflictingReservation != nil)
                 }
             }
         }

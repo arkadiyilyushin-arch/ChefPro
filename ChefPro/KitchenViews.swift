@@ -163,6 +163,11 @@ struct KitchenOrderCard: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if order.course > 1 || !order.tableNumber.isEmpty {
+                        Text(order.courseName)
+                            .font(.caption.bold())
+                            .foregroundStyle(.orange)
+                    }
                 }
                 Spacer()
                 Text(timerString)

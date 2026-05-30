@@ -358,10 +358,16 @@ struct KitchenOrder: Identifiable, Codable {
     var portions: Int
     var tableNumber: String = ""
     var note: String        = ""
+    var course: Int         = 1   // 1 = закуски/салаты, 2 = горячее, 3 = десерт
     var status: OrderStatus = .new
     var createdAt: Date     = Date()
     var cookingStartedAt: Date? = nil
     var readyAt: Date?          = nil
+}
+
+extension KitchenOrder {
+    static let courseNames = [1: "1 — Холодное", 2: "2 — Горячее", 3: "3 — Десерт"]
+    var courseName: String { KitchenOrder.courseNames[course] ?? "Курс \(course)" }
 }
 
 struct TemperatureLog: Identifiable, Codable {

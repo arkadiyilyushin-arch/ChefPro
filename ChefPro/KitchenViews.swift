@@ -104,7 +104,7 @@ struct KanbanColumn: View {
                 }
                 .padding(.bottom, 12)
             }
-            .frame(height: columnHeight - 52) // subtract header height
+            .frame(height: max(100, columnHeight - 52))
         }
         .frame(width: 280, alignment: .top)
     }

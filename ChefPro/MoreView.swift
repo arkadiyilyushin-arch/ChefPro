@@ -389,6 +389,24 @@ struct MoreView: View {
                     } label: { Label("Сотрудники", systemImage: "person.2.fill") }
 
                     NavigationLink {
+                        SyncView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Синхронизация", systemImage: "arrow.triangle.2.circlepath.circle.fill")
+                            Spacer()
+                            if store.isSyncing {
+                                ProgressView().scaleEffect(0.7)
+                            } else if store.syncError != nil {
+                                Image(systemName: "exclamationmark.icloud")
+                                    .foregroundStyle(.orange).font(.caption)
+                            } else if store.lastSyncDate != nil {
+                                Image(systemName: "checkmark.icloud.fill")
+                                    .foregroundStyle(.green).font(.caption)
+                            }
+                        }
+                    }
+
+                    NavigationLink {
                         BackupView().environmentObject(store)
                     } label: { Label("Резервная копия", systemImage: "externaldrive.fill") }
 

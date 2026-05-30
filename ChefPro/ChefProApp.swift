@@ -12,6 +12,8 @@ import FirebaseCrashlytics
 @main
 struct ChefProApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var store = ChefProStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         FirebaseApp.configure()
@@ -47,6 +49,12 @@ struct ChefProApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(store)
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        store.syncOnForeground()
+                    }
+                }
         }
     }
 }

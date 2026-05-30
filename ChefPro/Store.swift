@@ -130,6 +130,30 @@ final class ChefProStore: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         startNetworkMonitoring()
         Task { await syncFromCloud() }
+        startRemoteChangeListener()
+    }
+
+    // MARK: - Real-time remote change listener
+    private func startRemoteChangeListener() {
+        Task { @MainActor in
+            ChefProFirebaseService.shared.startListening {
+                await self.syncFromCloud()
+            }
+        }
+    }
+
+    /// Call when app returns to foreground (from ScenePhase observer in App)
+    func syncOnForeground() {
+        Task { await syncFromCloud() }
+    }
+
+    /// Switch this device to use another device's restaurantID, then download.
+    func connectToDevice(restaurantID: String) async {
+        await MainActor.run {
+            ChefProFirebaseService.shared.setRestaurantID(restaurantID)
+        }
+        await syncFromCloud()
+        startRemoteChangeListener()
     }
 
     private func startNetworkMonitoring() {
@@ -1597,13 +1621,15 @@ final class ChefProStore: ObservableObject {
         syncError = nil
         do {
             try await ChefProFirebaseService.shared.uploadAll(
-                dishes: dishes,
+                dishes:         dishes,
                 inventoryItems: inventoryItems,
-                deliveries: deliveries,
-                writeOffs: writeOffs,
-                productions: productions,
-                employees: employees,
-                profile: profile
+                deliveries:     deliveries,
+                writeOffs:      writeOffs,
+                productions:    productions,
+                employees:      employees,
+                profile:        profile,
+                reservations:   reservations,
+                suppliers:      suppliers
             )
             lastSyncDate = Date()
             pendingSyncCount = 0
@@ -1623,13 +1649,15 @@ final class ChefProStore: ObservableObject {
         syncError = nil
         do {
             let data = try await ChefProFirebaseService.shared.downloadAll()
-            if !data.dishes.isEmpty        { dishes = data.dishes }
+            if !data.dishes.isEmpty         { dishes         = data.dishes }
             if !data.inventoryItems.isEmpty { inventoryItems = data.inventoryItems }
-            if !data.deliveries.isEmpty    { deliveries = data.deliveries }
-            if !data.writeOffs.isEmpty     { writeOffs = data.writeOffs }
-            if !data.productions.isEmpty   { productions = data.productions }
-            if !data.employees.isEmpty     { employees = data.employees }
-            if let p = data.profile        { profile = p }
+            if !data.deliveries.isEmpty     { deliveries     = data.deliveries }
+            if !data.writeOffs.isEmpty      { writeOffs      = data.writeOffs }
+            if !data.productions.isEmpty    { productions    = data.productions }
+            if !data.employees.isEmpty      { employees      = data.employees }
+            if !data.reservations.isEmpty   { reservations   = data.reservations }
+            if !data.suppliers.isEmpty      { suppliers      = data.suppliers }
+            if let p = data.profile         { profile = p }
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {

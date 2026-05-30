@@ -392,10 +392,17 @@ struct DishDetailView: View {
                             }
                         }
 
-                        if currentDish.cookTime > 0 {
-                            HStack {
-                                Label("\(currentDish.cookTime) мин", systemImage: "timer")
-                                    .font(.caption).foregroundStyle(.secondary)
+                        if currentDish.salePrice > 0 || currentDish.cookTime > 0 {
+                            HStack(spacing: 16) {
+                                if currentDish.salePrice > 0 {
+                                    Label("\(currentDish.salePrice, specifier: "%.2f") ₽", systemImage: "tag.fill")
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.primary)
+                                }
+                                if currentDish.cookTime > 0 {
+                                    Label("\(currentDish.cookTime) мин", systemImage: "timer")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
                                 Spacer()
                             }
                         }

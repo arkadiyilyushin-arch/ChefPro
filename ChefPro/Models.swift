@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Models
 
-struct RecipeIngredient: Identifiable, Codable {
+struct RecipeIngredient: Identifiable, Codable, Equatable {
     var id = UUID()
     var productName: String
     var quantity: Double

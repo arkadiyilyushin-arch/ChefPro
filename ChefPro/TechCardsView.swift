@@ -1026,6 +1026,45 @@ struct DishEditorForm: View {
 
     let units = ["г", "кг", "мл", "л", "шт"]
 
+    // MARK: - Semi-finished cost calculation
+
+    /// Total ingredient cost accounting for yield losses
+    private var calculatedIngredientCost: Double {
+        ingredients.reduce(0.0) { total, ingredient in
+            // try exact match, then partial
+            let item = store.inventoryItems.first(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased()
+            }) ?? store.inventoryItems.first(where: {
+                $0.name.lowercased().contains(ingredient.productName.lowercased()) ||
+                ingredient.productName.lowercased().contains($0.name.lowercased())
+            })
+            guard let item else { return total }
+            let rawQty = ingredient.yieldFactor > 0
+                ? ingredient.quantity / ingredient.yieldFactor
+                : ingredient.quantity
+            let converted = store.convert(quantity: rawQty, from: ingredient.unit, to: item.unit)
+            return total + converted * item.pricePerUnit
+        }
+    }
+
+    /// Cost per one output unit (portionWeight amount)
+    private var costPerBatch: Double { calculatedIngredientCost }
+
+    /// How many ingredients were found in inventory
+    private var matchedCount: Int {
+        ingredients.filter { ingredient in
+            store.inventoryItems.contains(where: {
+                $0.name.lowercased() == ingredient.productName.lowercased() ||
+                $0.name.lowercased().contains(ingredient.productName.lowercased()) ||
+                ingredient.productName.lowercased().contains($0.name.lowercased())
+            })
+        }.count
+    }
+
+    private func applyCalculatedPrice() {
+        salePrice = String(format: "%.2f", costPerBatch)
+    }
+
     private var suggestions: [InventoryItem] {
         guard !productName.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         return store.inventoryItems
@@ -1101,6 +1140,56 @@ struct DishEditorForm: View {
                     .pickerStyle(.menu)
                     .frame(width: 70)
                 }
+            }
+
+            // ── Авторасчёт себестоимости (только для полуфабрикатов) ──
+            if dishType == .semifinished && !ingredients.isEmpty {
+                Section {
+                    // Total ingredient cost
+                    HStack {
+                        Label("Стоимость сырья", systemImage: "cart.fill")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(calculatedIngredientCost, specifier: "%.2f") ₽")
+                            .bold()
+                    }
+
+                    // Cost per output unit
+                    if let weight = parsePositiveDouble(portionWeight), weight > 0 {
+                        let perUnit = calculatedIngredientCost / weight
+                        HStack {
+                            Label("Себестоимость за 1 \(portionWeightUnit)", systemImage: "scalemass.fill")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(perUnit, specifier: "%.4f") ₽")
+                                .bold()
+                                .foregroundStyle(.chefAccent)
+                        }
+                    }
+
+                    // Coverage indicator
+                    if matchedCount < ingredients.count {
+                        Label("\(ingredients.count - matchedCount) ингр. не найдено на складе — цена занижена",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    // Apply button
+                    Button {
+                        applyCalculatedPrice()
+                    } label: {
+                        Label("Установить как цену продажи (\(String(format: "%.2f", costPerBatch)) ₽)",
+                              systemImage: "arrow.down.circle.fill")
+                    }
+                    .foregroundStyle(.chefAccent)
+                } header: {
+                    Text("Расчёт себестоимости")
+                } footer: {
+                    Text("Расчёт учитывает потери при обработке (yieldFactor). Нажмите кнопку чтобы применить как цену.")
+                }
+                .onChange(of: ingredients) { _, _ in applyCalculatedPrice() }
+                .onChange(of: portionWeight) { _, _ in applyCalculatedPrice() }
             }
 
             Section("Нутриенты (на порцию)") {

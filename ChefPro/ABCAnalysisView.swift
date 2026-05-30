@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - ABC Analysis of Inventory
 
-struct ABCItem: Identifiable {
+private struct InventoryABCItem: Identifiable {
     let id:        UUID
     let item:      InventoryItem
     let value:     Double    // quantity * price
@@ -32,29 +32,29 @@ struct ABCAnalysisView: View {
 
     // MARK: - Computed
 
-    private var abcItems: [ABCItem] {
+    private var abcItems: [InventoryABCItem] {
         let sorted = store.inventoryItems.sorted {
             ($0.quantity * $0.pricePerUnit) > ($1.quantity * $1.pricePerUnit)
         }
         let total = sorted.reduce(0.0) { $0 + $1.quantity * $1.pricePerUnit }
         guard total > 0 else {
-            return sorted.map { ABCItem(id: $0.id, item: $0, value: 0, valuePct: 0, cumPct: 0, abc: "C") }
+            return sorted.map { InventoryABCItem(id: $0.id, item: $0, value: 0, valuePct: 0, cumPct: 0, abc: "C") }
         }
         var cumulative = 0.0
         return sorted.map { item in
-            let val  = item.quantity * item.pricePerUnit
-            let pct  = val / total * 100
+            let val     = item.quantity * item.pricePerUnit
+            let pct     = val / total * 100
             let prevCum = cumulative
             cumulative += pct
             let abc: String
-            if prevCum < 80       { abc = "A" }
-            else if prevCum < 95  { abc = "B" }
-            else                  { abc = "C" }
-            return ABCItem(id: item.id, item: item, value: val, valuePct: pct, cumPct: cumulative, abc: abc)
+            if prevCum < 80      { abc = "A" }
+            else if prevCum < 95 { abc = "B" }
+            else                 { abc = "C" }
+            return InventoryABCItem(id: item.id, item: item, value: val, valuePct: pct, cumPct: cumulative, abc: abc)
         }
     }
 
-    private var filtered: [ABCItem] {
+    private var filtered: [InventoryABCItem] {
         switch filter {
         case .all: return abcItems
         case .a:   return abcItems.filter { $0.abc == "A" }
@@ -65,9 +65,11 @@ struct ABCAnalysisView: View {
 
     private var totalValue: Double { abcItems.reduce(0) { $0 + $1.value } }
 
-    private func count(_ abc: String) -> Int  { abcItems.filter { $0.abc == abc }.count }
+    private func count(_ abc: String) -> Int    { abcItems.filter { $0.abc == abc }.count }
     private func value(_ abc: String) -> Double { abcItems.filter { $0.abc == abc }.reduce(0) { $0 + $1.value } }
-    private func pct(_ abc: String) -> Double  { totalValue > 0 ? value(abc) / totalValue * 100 : 0 }
+    private func pct(_ abc: String)   -> Double { totalValue > 0 ? value(abc) / totalValue * 100 : 0 }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -111,18 +113,31 @@ struct ABCAnalysisView: View {
                     .padding(.horizontal)
 
                     // ── Item list ───────────────────────────────
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, ai in
-                            abcRow(ai, rank: abcItems.firstIndex(where: { $0.id == ai.id }).map { $0 + 1 } ?? (idx + 1))
-                            if idx < filtered.count - 1 {
-                                Divider().padding(.leading, 60)
+                    if filtered.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 44))
+                                .foregroundStyle(.tertiary)
+                            Text("Нет позиций в категории \(filter.rawValue)")
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, ai in
+                                abcRow(ai)
+                                if idx < filtered.count - 1 {
+                                    Divider().padding(.leading, 60)
+                                }
                             }
                         }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal)
                     }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
-                    .padding(.bottom, 40)
+
+                    Spacer().frame(height: 40)
                 }
                 .padding(.top, 8)
             }
@@ -153,9 +168,8 @@ struct ABCAnalysisView: View {
         .background(color.opacity(0.1))
     }
 
-    private func abcRow(_ ai: ABCItem, rank: Int) -> some View {
+    private func abcRow(_ ai: InventoryABCItem) -> some View {
         HStack(spacing: 12) {
-            // ABC badge
             Text(ai.abc)
                 .font(.headline.bold())
                 .foregroundStyle(.white)
@@ -166,8 +180,8 @@ struct ABCAnalysisView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(ai.item.name).font(.subheadline.bold())
                 HStack(spacing: 6) {
-                    Text(ai.item.category).foregroundStyle(.secondary)
-                    Text("·").foregroundStyle(.secondary)
+                    Text(ai.item.category)
+                    Text("·")
                     Text("\(String(format: "%.1f", ai.item.quantity)) \(ai.item.unit)")
                         .foregroundStyle(ai.item.isLowStock ? .red : .secondary)
                     if ai.item.isLowStock {
@@ -176,6 +190,7 @@ struct ABCAnalysisView: View {
                     }
                 }
                 .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()

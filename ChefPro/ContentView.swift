@@ -185,7 +185,10 @@ struct iPadMainView: View {
         case reservations = "Бронирование"
         case loyalty      = "Лояльность"
         case posIntegration = "Касса"
-        case abcAnalysis  = "ABC-анализ"
+        case abcAnalysis        = "ABC-анализ"
+        // Управление
+        case restaurantSwitcher = "Рестораны"
+        case sync               = "Синхронизация"
 
         var id: String { rawValue }
 
@@ -222,8 +225,10 @@ struct iPadMainView: View {
             case .checklists:     return "checklist"
             case .temperature:    return "thermometer.medium"
             case .settings:       return "gear"
-            case .backup:         return "externaldrive.fill"
-            case .reservations:   return "calendar.badge.plus"
+            case .backup:               return "externaldrive.fill"
+            case .restaurantSwitcher:   return "building.2.fill"
+            case .sync:                 return "arrow.triangle.2.circlepath.circle.fill"
+            case .reservations:         return "calendar.badge.plus"
             case .loyalty:        return "star.circle.fill"
             case .posIntegration: return "server.rack"
             case .abcAnalysis:    return "chart.bar.doc.horizontal"
@@ -236,9 +241,10 @@ struct iPadMainView: View {
     private let opsSections:  [AppSection] = [.shift, .kitchenBoard, .waiterMode, .purchases, .writeOffs, .kitchenMode]
     private let analyticsSections: [AppSection] = [.analytics, .sales, .reports, .profitLoss, .foodCostTrend, .pdfReports, .writeOffReport, .csvExport, .supplierAnalytics, .abcAnalysis]
     private let toolsSections: [AppSection] = [.stockMovements, .markupCalc, .unitConverter, .audit, .menuEng]
-    private let staffSections: [AppSection] = [.employees, .schedule, .suppliers]
+    private let staffSections: [AppSection] = [.schedule, .checklists, .temperature]
     private let guestSections: [AppSection] = [.reservations, .loyalty, .posIntegration]
-    private let systemSections: [AppSection] = [.profile, .checklists, .temperature, .settings, .backup]
+    private let systemSections:  [AppSection] = [.profile, .checklists, .temperature, .settings, .backup]
+    private let manageSections:  [AppSection] = [.restaurantSwitcher, .suppliers, .employees, .sync, .backup, .settings]
 
     var body: some View {
         NavigationSplitView {
@@ -261,8 +267,11 @@ struct iPadMainView: View {
                 Section("Гости и сервис") {
                     ForEach(guestSections) { s in sidebarRow(s) }
                 }
-                Section("Система") {
-                    ForEach(systemSections) { s in sidebarRow(s) }
+                Section("Управление") {
+                    ForEach(manageSections) { s in sidebarRow(s) }
+                }
+                Section("Профиль") {
+                    sidebarRow(.profile)
                 }
             }
             .navigationTitle("ChefPro")
@@ -341,7 +350,9 @@ struct iPadMainView: View {
         case .reservations:   TableReservationView().environmentObject(store)
         case .loyalty:        LoyaltyView().environmentObject(store)
         case .posIntegration: POSIntegrationView().environmentObject(store)
-        case .abcAnalysis:    ABCAnalysisView().environmentObject(store)
+        case .abcAnalysis:          ABCAnalysisView().environmentObject(store)
+        case .restaurantSwitcher:   RestaurantSwitcherView().environmentObject(store)
+        case .sync:                 SyncView().environmentObject(store)
         }
     }
 }

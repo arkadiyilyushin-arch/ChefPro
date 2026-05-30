@@ -18,13 +18,16 @@ struct KitchenBoardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 14) {
-                    KanbanColumn(title: "Новые",      accent: .blue,   orders: newOrders,     now: now)
-                    KanbanColumn(title: "Готовятся",  accent: .orange, orders: cookingOrders, now: now)
-                    KanbanColumn(title: "Готово",     accent: .green,  orders: readyOrders,   now: now)
+            GeometryReader { geo in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        KanbanColumn(title: "Новые",      accent: .blue,   orders: newOrders,     now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готовятся",  accent: .orange, orders: cookingOrders, now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готово",     accent: .green,  orders: readyOrders,   now: now, columnHeight: geo.size.height - 16)
+                    }
+                    .padding()
+                    .frame(minHeight: geo.size.height)
                 }
-                .padding()
             }
             .background(Color.chefBackground)
             .navigationTitle("Kitchen Board")
@@ -66,9 +69,10 @@ struct KanbanColumn: View {
     let accent: Color
     let orders: [KitchenOrder]
     let now: Date
+    var columnHeight: CGFloat = 600
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             // Column header
             HStack {
                 Text(title).font(.title3.bold())
@@ -81,21 +85,26 @@ struct KanbanColumn: View {
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 2)
+            .padding(.bottom, 12)
 
-            if orders.isEmpty {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(.systemGray6))
-                    .frame(width: 280, height: 110)
-                    .overlay(
-                        Text("Пусто")
-                            .foregroundStyle(.secondary)
-                    )
-            } else {
-                ForEach(orders) { order in
-                    KitchenOrderCard(order: order, now: now)
-                        .environmentObject(store)
+            // Scrollable orders list
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(spacing: 12) {
+                    if orders.isEmpty {
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color(.systemGray6))
+                            .frame(width: 272, height: 110)
+                            .overlay(Text("Пусто").foregroundStyle(.secondary))
+                    } else {
+                        ForEach(orders) { order in
+                            KitchenOrderCard(order: order, now: now)
+                                .environmentObject(store)
+                        }
+                    }
                 }
+                .padding(.bottom, 12)
             }
+            .frame(height: columnHeight - 52) // subtract header height
         }
         .frame(width: 280, alignment: .top)
     }

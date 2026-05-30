@@ -1110,7 +1110,24 @@ struct DishEditorForm: View {
 
             Section("Основная информация") {
                 TextField("Название блюда", text: $name)
-                TextField("Категория", text: $category)
+
+                // Category: type freely OR pick existing
+                HStack {
+                    TextField("Категория", text: $category)
+                    if !store.dishCategories.isEmpty {
+                        Menu {
+                            ForEach(store.dishCategories, id: \.self) { cat in
+                                Button(cat) { category = cat }
+                            }
+                            Divider()
+                            Button("Новая…") { category = "" }
+                        } label: {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .foregroundStyle(.chefAccent)
+                        }
+                    }
+                }
+
                 TextField("Цена продажи", text: $salePrice)
                     .keyboardType(.decimalPad)
                 Stepper(cookTime == 0 ? "Время готовки: не задано" : "Время готовки: \(cookTime) мин",

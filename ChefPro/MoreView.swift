@@ -227,10 +227,6 @@ struct MoreView: View {
                     NavigationLink {
                         DigitalMenuView().environmentObject(store)
                     } label: { Label("Цифровое меню", systemImage: "menucard.fill") }
-
-                    NavigationLink {
-                        FloorPlanView().environmentObject(store)
-                    } label: { Label("План зала", systemImage: "rectangle.split.3x3.fill") }
                 }
 
                 // ── Персонал ────────────────────────────────────
@@ -305,6 +301,10 @@ struct MoreView: View {
 
                 // ── Новые модули ────────────────────────────────
                 Section("Гости и сервис") {
+                    NavigationLink {
+                        FloorPlanView().environmentObject(store)
+                    } label: { Label("План зала", systemImage: "rectangle.split.3x3.fill") }
+
                     NavigationLink {
                         TableReservationView().environmentObject(store)
                     } label: {

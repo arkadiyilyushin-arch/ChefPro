@@ -91,7 +91,8 @@ struct DashboardView: View {
         store.dishes.filter { store.foodCostPercent($0) > store.foodCostThreshold }
     }
 
-    @State private var showQuickProduce = false
+    @State private var showQuickProduce    = false
+    @State private var showRestaurantPicker = false
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -116,12 +117,17 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
 
+                    // ── Offline banner ───────────────────────────────
+                    OfflineStatusBanner().environmentObject(store)
+                        .padding(.horizontal, -16)
+
                     // ── Приветствие ──────────────────────────────────
                     BigCard {
                         HStack(spacing: 16) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.orange)
+                                    .fill(LinearGradient(colors: [.orange, .red],
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
                                     .frame(width: 54, height: 54)
                                 Text(String(store.profile.name.prefix(1)).uppercased())
                                     .font(.title2.bold())
@@ -133,24 +139,50 @@ struct DashboardView: View {
                                 Text(shortDate)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
-                                HStack(spacing: 4) {
-                                    if !store.profile.position.isEmpty {
-                                        Text(store.profile.position)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text("·")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                Button {
+                                    showRestaurantPicker = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        if !store.profile.position.isEmpty {
+                                            Text(store.profile.position).font(.caption).foregroundStyle(.secondary)
+                                            Text("·").font(.caption).foregroundStyle(.secondary)
+                                        }
+                                        Text(store.restaurantName).font(.caption).foregroundStyle(.chefAccent)
+                                        Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.chefAccent)
                                     }
-                                    Text(store.restaurantName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
                                 }
+                                .buttonStyle(.plain)
                             }
                             Spacer()
-                            // Компактный статус синхронизации
                             syncIcon
                         }
+                    }
+
+                    // ── Брони сегодня ────────────────────────────────
+                    if !store.todayReservations.isEmpty {
+                        NavigationLink {
+                            TableReservationView().environmentObject(store)
+                        } label: {
+                            BigCard {
+                                HStack(spacing: 14) {
+                                    ZStack {
+                                        Circle().fill(Color.blue.opacity(0.12)).frame(width: 44, height: 44)
+                                        Image(systemName: "calendar.badge.clock")
+                                            .foregroundStyle(.blue).font(.title2)
+                                    }
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("Брони сегодня").font(.headline)
+                                        let confirmed = store.todayReservations.filter { $0.status == .confirmed }.count
+                                        let arrived   = store.todayReservations.filter { $0.status == .arrived }.count
+                                        Text("\(confirmed) подтв. · \(arrived) пришли")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(store.todayReservations.count)")
+                                        .font(.title2.bold()).foregroundStyle(.blue)
+                                }
+                            }
+                        }.buttonStyle(.plain)
                     }
 
                     // ── KPI Цели месяца ─────────────────────────────────
@@ -355,6 +387,9 @@ struct DashboardView: View {
             .navigationTitle("Главная")
             .sheet(isPresented: $showQuickProduce) {
                 QuickProduceView().environmentObject(store)
+            }
+            .sheet(isPresented: $showRestaurantPicker) {
+                RestaurantSwitcherView().environmentObject(store)
             }
         }
     }

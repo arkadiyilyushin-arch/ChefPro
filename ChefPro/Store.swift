@@ -2,6 +2,7 @@ import SwiftUI
 import UserNotifications
 import CoreSpotlight
 import WidgetKit
+import FirebaseCrashlytics
 
 // MARK: - Undo Support
 
@@ -64,6 +65,8 @@ final class ChefProStore: ObservableObject {
     @Published var isSyncing = false
     @Published var lastSyncDate: Date? = nil
     @Published var syncError: String? = nil
+    @Published var isOffline: Bool = false
+    @Published var pendingSyncCount: Int = 0
 
     @Published var undoItem: UndoableItem? = nil
 
@@ -123,7 +126,22 @@ final class ChefProStore: ObservableObject {
         lastSyncDate = UserDefaults.standard.object(forKey: lastSyncKey) as? Date
         if checklists.isEmpty { loadDefaultChecklists() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        startNetworkMonitoring()
         Task { await syncFromCloud() }
+    }
+
+    private func startNetworkMonitoring() {
+        let monitor = NetworkMonitor.shared
+        // Observe changes
+        NotificationCenter.default.addObserver(forName: .init("chefpro.networkChanged"), object: nil, queue: .main) { [weak self] note in
+            guard let self else { return }
+            let connected = (note.object as? Bool) ?? true
+            self.isOffline = !connected
+            if connected && self.pendingSyncCount > 0 {
+                Task { await self.syncToCloud() }
+            }
+        }
+        isOffline = !monitor.isConnected
     }
 
     // MARK: - Data Version Migration
@@ -157,10 +175,7 @@ final class ChefProStore: ObservableObject {
 
     /// Logs a non-fatal error. In release builds this should forward to Crashlytics.
     func logError(_ error: Error, context: String) {
-        #if !DEBUG
-        // TODO: Uncomment after adding FirebaseCrashlytics target (see CRASHLYTICS_SETUP.md):
-        // Crashlytics.crashlytics().record(error: error)
-        #endif
+        Crashlytics.crashlytics().record(error: error)
         print("[\(context)] Error: \(error)")
     }
 
@@ -850,6 +865,102 @@ final class ChefProStore: ObservableObject {
         }
     }
 
+    // MARK: - Smart Notifications 2.0
+
+    /// Schedules smart daily briefing: tomorrow's reservations, expiring items, low stock, revenue goal
+    func scheduleSmartDailyBriefing() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["chefpro-smart-briefing"])
+        guard notificationsEnabled else { return }
+
+        var parts: [String] = []
+
+        // Tomorrow's reservations
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        let tomorrowRes = reservations.filter {
+            Calendar.current.isDate($0.date, inSameDayAs: tomorrow) && $0.status == .confirmed
+        }
+        if !tomorrowRes.isEmpty {
+            parts.append("📅 Завтра \(tomorrowRes.count) брон\(tomorrowRes.count == 1 ? "ь" : "и")")
+        }
+
+        // Low stock
+        if !lowStockItems.isEmpty {
+            parts.append("📦 Заканч. \(lowStockItems.count) товар\(lowStockItems.count == 1 ? "" : "ов")")
+        }
+
+        // Expiring
+        let expiringCount = expiringItems.filter { !$0.isExpired }.count
+        if expiringCount > 0 {
+            parts.append("⏰ Срок год. \(expiringCount) поз.")
+        }
+
+        // Revenue goal
+        if monthlyRevenuePlan > 0 {
+            let pct = Int(currentMonthRevenue / monthlyRevenuePlan * 100)
+            parts.append("💰 Выручка \(pct)% плана")
+        }
+
+        guard !parts.isEmpty else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Утренний дайджест — \(restaurantName)"
+        content.body  = parts.joined(separator: " · ")
+        content.sound = .default
+        content.categoryIdentifier = "DAILY_BRIEFING"
+
+        var dc = DateComponents(); dc.hour = 8; dc.minute = 30
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        center.add(UNNotificationRequest(identifier: "chefpro-smart-briefing", content: content, trigger: trigger))
+    }
+
+    /// Fires when a reservation is in 2 hours
+    func scheduleReservationReminder(for res: TableReservation) {
+        guard notificationsEnabled else { return }
+        let fireDate = res.date.addingTimeInterval(-7200)
+        guard fireDate > Date() else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Бронь через 2 часа"
+        content.body  = "\(res.guestName) · Стол \(res.tableNumber) · \(res.persons) гост."
+        content.sound = .default
+
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: Calendar.current.dateComponents([.year,.month,.day,.hour,.minute], from: fireDate),
+            repeats: false
+        )
+        let id = "res-reminder-\(res.id.uuidString)"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+    }
+
+    /// Cancel reservation reminder when reservation is cancelled/deleted
+    func cancelReservationReminder(for res: TableReservation) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: ["res-reminder-\(res.id.uuidString)"]
+        )
+    }
+
+    /// Notify when food cost exceeds threshold
+    func notifyIfFoodCostHigh() {
+        guard notificationsEnabled else { return }
+        let avg = currentMonthAvgFoodCost
+        guard avg > foodCostThreshold && avg > 0 else { return }
+
+        let udKey = "chefpro_fc_notified_\(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)"
+        guard !UserDefaults.standard.bool(forKey: udKey) else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "⚠️ Food Cost высокий"
+        content.body  = "Средний FC за месяц: \(String(format: "%.1f", avg))% (порог \(Int(foodCostThreshold))%)"
+        content.sound = .default
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "fc-alert-\(Date().timeIntervalSince1970)",
+                                  content: content,
+                                  trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
+        )
+        UserDefaults.standard.set(true, forKey: udKey)
+    }
+
     /// Removes a pending low-stock notification when an item's stock is replenished.
     func clearLowStockNotification(for item: InventoryItem) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
@@ -1412,6 +1523,10 @@ final class ChefProStore: ObservableObject {
     // Debounced auto-upload: waits 4 s after the last change before sending to Firestore
     private func scheduleUpload() {
         guard !isSyncingFromCloud else { return }
+        if isOffline {
+            pendingSyncCount += 1
+            return
+        }
         uploadTask?.cancel()
         uploadTask = Task { [weak self] in
             guard let self else { return }
@@ -1437,6 +1552,7 @@ final class ChefProStore: ObservableObject {
                 profile: profile
             )
             lastSyncDate = Date()
+            pendingSyncCount = 0
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {
             syncError = error.localizedDescription

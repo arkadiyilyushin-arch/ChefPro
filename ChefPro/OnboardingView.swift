@@ -490,111 +490,213 @@ private struct SetupRow: View {
     }
 }
 
-// MARK: - Feature Slides (existing onboarding)
+// MARK: - Feature Slides 2.0
+
+struct OnboardingPage {
+    let icon: String
+    let gradient: [Color]
+    let title: String
+    let body: String
+    let features: [String]
+}
 
 struct OnboardingSlidesView: View {
     @EnvironmentObject var store: ChefProStore
     let onFinish: () -> Void
     @State private var page = 0
+    @State private var iconScale: CGFloat = 0.5
+    @State private var iconOpacity: Double = 0
 
-    private let pages: [(icon: String, color: Color, title: String, body: String)] = [
-        ("fork.knife.circle.fill",      .orange, "Добро пожаловать в ChefPro",    "Управление рестораном в одном приложении — склад, производство, аналитика и команда."),
-        ("book.fill",                   .blue,   "Техкарты и рецепты",            "Создавайте рецепты с ингредиентами, считайте food cost автоматически и задавайте время готовки."),
-        ("shippingbox.fill",            .green,  "Склад и закупки",               "Отслеживайте остатки, срок годности, единицы заказа. Приложение сообщит, что нужно заказать."),
-        ("rectangle.3.group.fill",      .purple, "Kitchen Board",                 "Канбан-доска для кухни с таймерами по каждому заказу. Статус меняется одним тапом."),
-        ("chart.line.uptrend.xyaxis",   .red,    "Аналитика и P&L",              "Food cost, динамика продаж, Menu Engineering и P&L — всё в реальном времени."),
-        ("star.3.fill",                 .teal,   "Больше возможностей",           "Резервное копирование, iCloud-синхронизация, сканер штрихкодов, Spotlight-поиск и многое другое."),
+    private let pages: [OnboardingPage] = [
+        OnboardingPage(
+            icon: "fork.knife.circle.fill",
+            gradient: [.orange, .red],
+            title: "Добро пожаловать\nв ChefPro",
+            body: "Полное управление рестораном в одном приложении",
+            features: ["📦 Склад и закупки", "📊 Аналитика и P&L", "👨‍🍳 Команда и смены"]
+        ),
+        OnboardingPage(
+            icon: "book.fill",
+            gradient: [.blue, .purple],
+            title: "Техкарты и рецепты",
+            body: "Создавайте рецепты, считайте food cost автоматически",
+            features: ["🧮 Автоподсчёт себестоимости", "🌡 HACCP и температуры", "📸 Фото пошагово"]
+        ),
+        OnboardingPage(
+            icon: "shippingbox.fill",
+            gradient: [.green, .teal],
+            title: "Склад под контролем",
+            body: "Остатки, срок годности, автозаказ поставщикам",
+            features: ["⚠️ Уведомления о низком остатке", "📅 Контроль срока годности", "🏷 Штрихкоды"]
+        ),
+        OnboardingPage(
+            icon: "rectangle.3.group.fill",
+            gradient: [.purple, .pink],
+            title: "Kitchen Board",
+            body: "Канбан-доска для кухни — заказы в реальном времени",
+            features: ["⏱ Таймеры по заказам", "🔔 Уведомления готовности", "📋 Режим официанта"]
+        ),
+        OnboardingPage(
+            icon: "chart.line.uptrend.xyaxis",
+            gradient: [.red, .orange],
+            title: "Аналитика и P&L",
+            body: "Food cost, выручка, Menu Engineering — всё в реальном времени",
+            features: ["💰 P&L по периодам", "🏆 Рейтинг прибыльности", "📈 ABC-анализ склада"]
+        ),
+        OnboardingPage(
+            icon: "star.circle.fill",
+            gradient: [.yellow, .orange],
+            title: "Всё для гостей",
+            body: "Бронирование, лояльность и интеграция с кассой",
+            features: ["📅 Бронирование столиков", "⭐️ Программа лояльности", "🖥 Интеграция POS"]
+        ),
     ]
 
     var body: some View {
         ZStack {
-            Color(.systemGroupedBackground).ignoresSafeArea()
+            // Animated gradient background
+            LinearGradient(
+                colors: pages[page].gradient.map { $0.opacity(0.15) } + [Color(.systemBackground)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            .animation(.easeInOut(duration: 0.5), value: page)
 
             VStack(spacing: 0) {
+                // Skip button
+                HStack {
+                    Spacer()
+                    Button("Пропустить") { onFinish() }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                }
+
+                // Slide content
                 TabView(selection: $page) {
                     ForEach(pages.indices, id: \.self) { i in
-                        let p = pages[i]
-                        VStack(spacing: 28) {
-                            Spacer()
-                            ZStack {
-                                Circle().fill(p.color.opacity(0.15)).frame(width: 140, height: 140)
-                                Image(systemName: p.icon)
-                                    .font(.system(size: 64)).foregroundStyle(p.color)
-                            }
-                            VStack(spacing: 14) {
-                                Text(p.title)
-                                    .font(.title2.bold())
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 24)
-                                Text(p.body)
-                                    .font(.body)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 32)
-                            }
-                            // Extra feature bullets on the last page
-                            if i == pages.count - 1 {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Label("Резервное копирование & iCloud", systemImage: "icloud.fill")
-                                    Label("Сканер штрихкодов", systemImage: "barcode.viewfinder")
-                                    Label("Spotlight-поиск блюд и склада", systemImage: "magnifyingglass")
-                                }
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 32)
-                            }
-                            Spacer()
-                            Spacer()
-                        }
-                        .tag(i)
+                        slideContent(pages[i], isActive: i == page)
+                            .tag(i)
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .indexViewStyle(.page(backgroundDisplayMode: .always))
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.4), value: page)
 
-                VStack(spacing: 12) {
+                // Dots + buttons
+                VStack(spacing: 20) {
+                    // Custom dots
+                    HStack(spacing: 8) {
+                        ForEach(pages.indices, id: \.self) { i in
+                            Capsule()
+                                .fill(i == page ? Color.chefAccent : Color(.tertiarySystemBackground))
+                                .frame(width: i == page ? 24 : 8, height: 8)
+                                .animation(.spring(response: 0.3), value: page)
+                        }
+                    }
+
                     if page < pages.count - 1 {
                         Button {
-                            withAnimation { page += 1 }
+                            withAnimation(.spring()) { page += 1 }
                         } label: {
-                            Text("Далее")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity).frame(height: 56)
-                                .background(Color.chefAccent)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 18))
+                            HStack {
+                                Text("Далее")
+                                Image(systemName: "arrow.right")
+                            }
+                            .font(.headline)
+                            .frame(maxWidth: .infinity).frame(height: 56)
+                            .background(
+                                LinearGradient(colors: pages[page].gradient,
+                                               startPoint: .leading, endPoint: .trailing)
+                            )
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
                         }
-                        Button("Пропустить") { onFinish() }
-                            .font(.subheadline).foregroundStyle(.secondary)
                     } else {
-                        Button {
-                            store.populateDemoData()
-                            onFinish()
-                        } label: {
-                            Label("Загрузить демо-данные", systemImage: "doc.text.magnifyingglass")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity).frame(height: 56)
-                                .background(Color.chefAccent.opacity(0.15))
-                                .foregroundStyle(.chefAccent)
-                                .clipShape(RoundedRectangle(cornerRadius: 18))
-                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.chefAccent, lineWidth: 1.5))
-                        }
-
-                        Button {
-                            onFinish()
-                        } label: {
-                            Text("Начать работу")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity).frame(height: 56)
-                                .background(Color.chefAccent)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 18))
+                        VStack(spacing: 12) {
+                            Button {
+                                store.populateDemoData()
+                                onFinish()
+                            } label: {
+                                Label("Загрузить демо-данные", systemImage: "doc.text.magnifyingglass")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity).frame(height: 52)
+                                    .background(Color.chefAccent.opacity(0.12))
+                                    .foregroundStyle(.chefAccent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.chefAccent, lineWidth: 1.5))
+                            }
+                            Button {
+                                onFinish()
+                            } label: {
+                                Text("Начать работу →")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity).frame(height: 56)
+                                    .background(
+                                        LinearGradient(colors: [.orange, .red],
+                                                       startPoint: .leading, endPoint: .trailing)
+                                    )
+                                    .foregroundStyle(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                            }
                         }
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 28)
+                .padding(.bottom, 44)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func slideContent(_ p: OnboardingPage, isActive: Bool) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            // Animated icon
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: p.gradient.map { $0.opacity(0.2) },
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 150, height: 150)
+                Circle()
+                    .fill(LinearGradient(colors: p.gradient,
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 100, height: 100)
+                    .shadow(color: p.gradient[0].opacity(0.4), radius: 20, x: 0, y: 10)
+                Image(systemName: p.icon)
+                    .font(.system(size: 48))
+                    .foregroundStyle(.white)
+            }
+            .scaleEffect(isActive ? 1.0 : 0.8)
+            .opacity(isActive ? 1.0 : 0.5)
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isActive)
+
+            VStack(spacing: 12) {
+                Text(p.title)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Text(p.body)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+            }
+
+            // Feature pills
+            VStack(spacing: 8) {
+                ForEach(p.features, id: \.self) { f in
+                    Text(f)
+                        .font(.subheadline)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(Capsule())
+                }
+            }
+
+            Spacer()
+            Spacer()
         }
     }
 }

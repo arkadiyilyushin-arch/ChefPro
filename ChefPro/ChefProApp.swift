@@ -7,8 +7,7 @@
 
 import SwiftUI
 import FirebaseCore
-// TODO: Uncomment after adding FirebaseCrashlytics product to target (see CRASHLYTICS_SETUP.md):
-// import FirebaseCrashlytics
+import FirebaseCrashlytics
 
 @main
 struct ChefProApp: App {
@@ -16,8 +15,7 @@ struct ChefProApp: App {
 
     init() {
         FirebaseApp.configure()
-        // TODO: Uncomment after adding FirebaseCrashlytics product to target (see CRASHLYTICS_SETUP.md):
-        // Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
+        Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
         UIApplication.shared.shortcutItems = [
             UIApplicationShortcutItem(
                 type: "com.chefpro.kitchenboard",

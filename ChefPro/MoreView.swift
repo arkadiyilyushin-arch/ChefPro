@@ -227,6 +227,10 @@ struct MoreView: View {
                     NavigationLink {
                         DigitalMenuView().environmentObject(store)
                     } label: { Label("Цифровое меню", systemImage: "menucard.fill") }
+
+                    NavigationLink {
+                        FloorPlanView().environmentObject(store)
+                    } label: { Label("План зала", systemImage: "rectangle.split.3x3.fill") }
                 }
 
                 // ── Персонал ────────────────────────────────────
@@ -362,6 +366,19 @@ struct MoreView: View {
 
                 // ── Управление ──────────────────────────────────
                 Section("Управление") {
+                    NavigationLink {
+                        RestaurantSwitcherView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Рестораны", systemImage: "building.2.fill")
+                            Spacer()
+                            Text(store.restaurantName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+
                     NavigationLink {
                         SuppliersView().environmentObject(store)
                     } label: { Label("Поставщики", systemImage: "truck.box.fill") }

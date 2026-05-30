@@ -16,6 +16,7 @@
 		06C65AA42FB828F8004DAE17 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 06C65AA32FB828F8004DAE17 /* FirebaseFirestore */; };
 		06C65AA62FB82DA9004DAE17 /* ChefProFirebaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C65AA52FB82DA9004DAE17 /* ChefProFirebaseService.swift */; };
 		06C65AA82FB9093B004DAE17 /* FirebaseFirestoreCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 06C65AA72FB9093B004DAE17 /* FirebaseFirestoreCombine-Community */; };
+		68357FE27CBF431D98446833 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 35999476904F4CD1A74FB3A0 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,6 +100,7 @@
 				06C65AA22FB828F8004DAE17 /* FirebaseCore in Frameworks */,
 				06C65AA82FB9093B004DAE17 /* FirebaseFirestoreCombine-Community in Frameworks */,
 				06C65AA02FB828F8004DAE17 /* FirebaseAuth in Frameworks */,
+				68357FE27CBF431D98446833 /* FirebaseCrashlytics in Frameworks */,
 				06C65AA42FB828F8004DAE17 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -187,6 +189,7 @@
 			name = ChefPro;
 			packageProductDependencies = (
 				06C65A9F2FB828F8004DAE17 /* FirebaseAuth */,
+				35999476904F4CD1A74FB3A0 /* FirebaseCrashlytics */,
 				06C65AA12FB828F8004DAE17 /* FirebaseCore */,
 				06C65AA32FB828F8004DAE17 /* FirebaseFirestore */,
 				06C65AA72FB9093B004DAE17 /* FirebaseFirestoreCombine-Community */,
@@ -785,6 +788,11 @@
 		06C65AA72FB9093B004DAE17 /* FirebaseFirestoreCombine-Community */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = "FirebaseFirestoreCombine-Community";
+		};
+		35999476904F4CD1A74FB3A0 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 06C65A9E2FB828F8004DAE17 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

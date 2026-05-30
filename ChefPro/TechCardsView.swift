@@ -7,8 +7,6 @@ import UIKit
 enum DishSortOrder: String, CaseIterable {
     case name     = "Название"
     case foodCost = "Себестоимость"
-    case price    = "Цена продажи"
-    case margin   = "Маржа"
 }
 
 // MARK: - Tech Cards
@@ -62,10 +60,12 @@ struct DishRowCard: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(foodCostPct, specifier: "%.0f")%")
-                        .font(.title3).bold().foregroundStyle(fcColor)
-                    Text("Food cost").font(.caption).foregroundStyle(.secondary)
+                if dish.dishType != .semifinished {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(foodCostPct, specifier: "%.0f")%")
+                            .font(.title3).bold().foregroundStyle(fcColor)
+                        Text("Food cost").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -105,14 +105,6 @@ struct TechCardsView: View {
             base.sort { $0.name < $1.name }
         case .foodCost:
             base.sort { store.calculateDishCost($0) < store.calculateDishCost($1) }
-        case .price:
-            base.sort { $0.salePrice > $1.salePrice }
-        case .margin:
-            base.sort {
-                let m0 = $0.salePrice - store.calculateDishCost($0)
-                let m1 = $1.salePrice - store.calculateDishCost($1)
-                return m0 > m1
-            }
         }
         return base.sorted { $0.isFavorite && !$1.isFavorite }
     }
@@ -337,14 +329,16 @@ struct DishDetailView: View {
 
                             Spacer()
 
-                            VStack(alignment: .trailing) {
-                                Text("Food cost")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(store.foodCostPercent(currentDish), specifier: "%.1f")%")
-                                    .font(.title2)
-                                    .bold()
-                                    .foregroundStyle(.chefAccent)
+                            if currentDish.dishType != .semifinished {
+                                VStack(alignment: .trailing) {
+                                    Text("Food cost")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text("\(store.foodCostPercent(currentDish), specifier: "%.1f")%")
+                                        .font(.title2)
+                                        .bold()
+                                        .foregroundStyle(.chefAccent)
+                                }
                             }
                         }
 
@@ -382,13 +376,11 @@ struct DishDetailView: View {
                             }
                         }
 
-                        HStack(spacing: 16) {
-                            Text("Цена продажи: \(currentDish.salePrice, specifier: "%.2f")")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if currentDish.cookTime > 0 {
+                        if currentDish.cookTime > 0 {
+                            HStack {
                                 Label("\(currentDish.cookTime) мин", systemImage: "timer")
                                     .font(.caption).foregroundStyle(.secondary)
+                                Spacer()
                             }
                         }
                         HStack(spacing: 6) {
@@ -767,7 +759,6 @@ struct AddDishView: View {
     @Environment(\.dismiss) var dismiss
     @State private var name = ""
     @State private var category = ""
-    @State private var salePrice = ""
     @State private var ingredients: [RecipeIngredient] = []
     @State private var allergens: [String] = []
     @State private var cookTime: Int = 0
@@ -786,8 +777,7 @@ struct AddDishView: View {
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !category.trimmingCharacters(in: .whitespaces).isEmpty &&
-        parsePositiveDouble(salePrice) != nil
+        !category.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -795,7 +785,6 @@ struct AddDishView: View {
             DishEditorForm(
                 name: $name,
                 category: $category,
-                salePrice: $salePrice,
                 ingredients: $ingredients,
                 allergens: $allergens,
                 cookTime: $cookTime,
@@ -820,7 +809,7 @@ struct AddDishView: View {
                         var dish = Dish(
                             name: name,
                             category: category,
-                            salePrice: parsePositiveDouble(salePrice) ?? 0,
+                            salePrice: 0,
                             ingredients: ingredients,
                             allergens: allergens,
                             cookTime: cookTime,
@@ -859,7 +848,6 @@ struct EditDishView: View {
 
     @State private var name: String
     @State private var category: String
-    @State private var salePrice: String
     @State private var ingredients: [RecipeIngredient]
     @State private var allergens: [String]
     @State private var cookTime: Int
@@ -881,7 +869,6 @@ struct EditDishView: View {
         self.onSave = onSave
         _name        = State(initialValue: dish.name)
         _category    = State(initialValue: dish.category)
-        _salePrice   = State(initialValue: String(dish.salePrice))
         _ingredients = State(initialValue: dish.ingredients)
         _allergens   = State(initialValue: dish.allergens)
         _cookTime    = State(initialValue: dish.cookTime)
@@ -898,8 +885,7 @@ struct EditDishView: View {
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !category.trimmingCharacters(in: .whitespaces).isEmpty &&
-        parsePositiveDouble(salePrice) != nil
+        !category.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -907,7 +893,6 @@ struct EditDishView: View {
             DishEditorForm(
                 name: $name,
                 category: $category,
-                salePrice: $salePrice,
                 ingredients: $ingredients,
                 allergens: $allergens,
                 cookTime: $cookTime,
@@ -936,7 +921,7 @@ struct EditDishView: View {
                             id: dish.id,
                             name: name,
                             category: category,
-                            salePrice: parsePositiveDouble(salePrice) ?? 0,
+                            salePrice: dish.salePrice,   // preserve existing value
                             ingredients: ingredients,
                             allergens: allergens,
                             cookTime: cookTime,
@@ -980,7 +965,6 @@ struct DishEditorForm: View {
     @EnvironmentObject var store: ChefProStore
     @Binding var name: String
     @Binding var category: String
-    @Binding var salePrice: String
     @Binding var ingredients: [RecipeIngredient]
     @Binding var allergens: [String]
     @Binding var cookTime: Int
@@ -1059,8 +1043,6 @@ struct DishEditorForm: View {
             Section("Основная информация") {
                 TextField("Название блюда", text: $name)
                 TextField("Категория", text: $category)
-                TextField("Цена продажи", text: $salePrice)
-                    .keyboardType(.decimalPad)
                 Stepper(cookTime == 0 ? "Время готовки: не задано" : "Время готовки: \(cookTime) мин",
                         value: $cookTime, in: 0...180, step: 5)
                 Picker("Статус в меню", selection: $menuStatus) {
@@ -1558,7 +1540,6 @@ struct MenuCollectionDetailView: View {
                             Text(dish.category).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("\(dish.salePrice, specifier: "%.2f")").foregroundStyle(.chefAccent)
                     }
                 }
                 .onDelete { offsets in
@@ -1987,7 +1968,7 @@ struct RecipeTemplatesView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(template.name).font(.headline)
-                                Text("\(template.ingredients.count) ингредиентов · \(template.salePrice, specifier: "%.2f")")
+                                Text("\(template.ingredients.count) ингредиентов")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()

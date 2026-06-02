@@ -129,8 +129,12 @@ final class ChefProStore: ObservableObject {
         if checklists.isEmpty { loadDefaultChecklists() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         startNetworkMonitoring()
-        Task { await syncFromCloud() }
+        Task {
+            try? await ChefProFirebaseService.shared.registerAsMember()
+            await syncFromCloud()
+        }
         startRemoteChangeListener()
+        startEmployeeSync()
     }
 
     // MARK: - Real-time remote change listener
@@ -139,6 +143,16 @@ final class ChefProStore: ObservableObject {
             ChefProFirebaseService.shared.startListening {
                 await self.syncFromCloud()
             }
+        }
+    }
+
+    // MARK: - Real-time employee sync
+    private func startEmployeeSync() {
+        ChefProFirebaseService.shared.startEmployeeListener { [weak self] updated in
+            guard let self else { return }
+            self.isSyncingFromCloud = true
+            self.employees = updated
+            self.isSyncingFromCloud = false
         }
     }
 

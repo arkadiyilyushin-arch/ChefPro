@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Restaurant data ───────────────────────────────────────────────────
+    // A user can access a restaurant only if their UID appears in
+    // the members sub-collection (written when the device first joins).
+    match /restaurants/{restaurantID} {
+
+      function isMember() {
+        return exists(/databases/$(database)/documents/restaurants/$(restaurantID)/members/$(request.auth.uid));
+      }
+
+      // Root restaurant document
+      allow read, write: if request.auth != null && isMember();
+
+      // All sub-collections (dishes, inventory, employees, …)
+      match /{collection}/{docId} {
+        allow read, write: if request.auth != null && isMember();
+      }
+
+      // Members list itself: any authenticated user may join (write their own
+      // UID only); only members can read the full list.
+      match /members/{uid} {
+        allow create: if request.auth != null && request.auth.uid == uid;
+        allow read, delete: if request.auth != null && isMember();
+      }
+    }
+
+    // Block everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -73,6 +73,39 @@ final class ChefProFirebaseService: ObservableObject {
         }
     }
 
+    // ── Member registration ───────────────────────────────────────────────
+    /// Registers the current device's Firebase UID in the restaurant's
+    /// members sub-collection. Security rules require this before any read/write.
+    func registerAsMember() async throws {
+        try await signInAnonymouslyIfNeeded()
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let memberRef = db
+            .collection("restaurants").document(restaurantID)
+            .collection("members").document(uid)
+        // merge: true so we don't overwrite joinedAt written by Cloud Function
+        try await memberRef.setData(["uid": uid, "deviceID": deviceID], merge: true)
+    }
+
+    // ── Real-time employee listener ───────────────────────────────────────
+    private var employeeListener: ListenerRegistration?
+
+    /// Starts a real-time listener on the employees sub-collection.
+    /// `onUpdate` is called with the fresh list whenever Firestore changes.
+    func startEmployeeListener(onUpdate: @escaping ([Employee]) -> Void) {
+        stopEmployeeListener()
+        let col = db.collection("restaurants").document(restaurantID).collection("employees")
+        employeeListener = col.addSnapshotListener { snapshot, error in
+            guard let snapshot, error == nil else { return }
+            let employees = snapshot.documents.compactMap { try? $0.data(as: Employee.self) }
+            DispatchQueue.main.async { onUpdate(employees) }
+        }
+    }
+
+    func stopEmployeeListener() {
+        employeeListener?.remove()
+        employeeListener = nil
+    }
+
     // ── Upload ────────────────────────────────────────────────────────────
     func uploadAll(
         dishes:         [Dish],

@@ -536,6 +536,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Сканирование штрихкодов продуктов для приёмки и учёта на складе";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Голосовой ввод для списаний";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для быстрого ввода названий продуктов";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -566,6 +568,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Сканирование штрихкодов продуктов для приёмки и учёта на складе";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Голосовой ввод для списаний";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для быстрого ввода названий продуктов";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

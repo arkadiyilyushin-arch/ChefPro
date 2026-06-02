@@ -304,6 +304,20 @@ final class ChefProStore: ObservableObject {
     // MARK: Kitchen Orders
     func addKitchenOrder(_ order: KitchenOrder) {
         kitchenOrders.append(order)
+        scheduleKitchenOrderNotification(order)
+    }
+
+    private func scheduleKitchenOrderNotification(_ order: KitchenOrder) {
+        guard notificationsEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Новый заказ"
+        let tableInfo = order.tableNumber.isEmpty ? "" : " — стол \(order.tableNumber)"
+        content.body  = "\(order.dishName) × \(order.portions)\(tableInfo)"
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "kitchen-order-\(order.id)", content: content, trigger: trigger)
+        )
     }
 
     func advanceOrderStatus(_ order: KitchenOrder) {
@@ -851,6 +865,37 @@ final class ChefProStore: ObservableObject {
         var dc = DateComponents(); dc.hour = 8; dc.minute = 0
         let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
         center.add(UNNotificationRequest(identifier: "chefpro-daily-digest", content: content, trigger: trigger))
+    }
+
+    // MARK: CSV Price Import
+
+    /// Parses CSV (comma or semicolon-separated) with columns: product_name, price_per_unit.
+    /// Updates matching inventory items and appends to their price history.
+    @discardableResult
+    func applyCSVPriceImport(_ csvText: String) -> String {
+        let lines = csvText.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        var updated = 0
+        var skipped = 0
+        for line in lines {
+            let sep: Character = line.contains(";") ? ";" : ","
+            let parts = line.split(separator: sep, maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2,
+                  let price = Double(parts[1].replacingOccurrences(of: ",", with: ".")) else {
+                skipped += 1; continue
+            }
+            let name = parts[0]
+            if let idx = inventoryItems.firstIndex(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+                let oldPrice = inventoryItems[idx].pricePerUnit
+                if oldPrice != price {
+                    inventoryItems[idx].priceHistory.append(PricePoint(date: Date(), price: price))
+                }
+                inventoryItems[idx].pricePerUnit = price
+                updated += 1
+            } else {
+                skipped += 1
+            }
+        }
+        return "Обновлено: \(updated) позиций. Не найдено: \(skipped)."
     }
 
     // MARK: Low Stock Notifications

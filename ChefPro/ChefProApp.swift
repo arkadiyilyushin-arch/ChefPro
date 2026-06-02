@@ -8,6 +8,7 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseCrashlytics
+import FirebaseFirestore
 
 @main
 struct ChefProApp: App {
@@ -17,6 +18,11 @@ struct ChefProApp: App {
 
     init() {
         FirebaseApp.configure()
+
+        // Enable offline persistence with 100 MB cache
+        let settings = FirestoreSettings()
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: 100 * 1024 * 1024 as NSNumber)
+        Firestore.firestore().settings = settings
         Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
         UIApplication.shared.shortcutItems = [
             UIApplicationShortcutItem(

@@ -154,6 +154,23 @@ struct MoreView: View {
                 // ── Инструменты ─────────────────────────────────
                 Section("Инструменты") {
                     NavigationLink {
+                        ExpiryWatchlistView().environmentObject(store)
+                    } label: {
+                        HStack {
+                            Label("Срок годности", systemImage: "calendar.badge.exclamationmark")
+                            Spacer()
+                            if !store.expiringItems.isEmpty {
+                                Text("\(store.expiringItems.count)")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundStyle(.red)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    NavigationLink {
                         StockMovementsView().environmentObject(store)
                     } label: { Label("История движений", systemImage: "clock.arrow.circlepath") }
 
@@ -418,5 +435,102 @@ struct MoreView: View {
             }
             .navigationTitle("Еще")
         }
+    }
+}
+
+// MARK: - Expiry Watchlist
+
+struct ExpiryWatchlistView: View {
+    @EnvironmentObject var store: ChefProStore
+
+    private var expiredItems: [InventoryItem] {
+        store.inventoryItems.filter { $0.isExpired }.sorted { $0.name < $1.name }
+    }
+    private var expiringSoonItems: [InventoryItem] {
+        store.inventoryItems.filter { $0.isExpiringSoon }.sorted {
+            ($0.expiryDate ?? .distantFuture) < ($1.expiryDate ?? .distantFuture)
+        }
+    }
+
+    var body: some View {
+        List {
+            if expiredItems.isEmpty && expiringSoonItems.isEmpty {
+                EmptyStateView(
+                    icon: "checkmark.seal.fill",
+                    title: "Всё в порядке",
+                    subtitle: "Продуктов с истекающим сроком годности нет."
+                )
+                .listRowBackground(Color.clear)
+            }
+
+            if !expiredItems.isEmpty {
+                Section {
+                    ForEach(expiredItems) { item in
+                        ExpiryItemRow(item: item, isExpired: true)
+                    }
+                } header: {
+                    Label("Просрочено (\(expiredItems.count))", systemImage: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if !expiringSoonItems.isEmpty {
+                Section {
+                    ForEach(expiringSoonItems) { item in
+                        ExpiryItemRow(item: item, isExpired: false)
+                    }
+                } header: {
+                    Label("Истекает скоро (\(expiringSoonItems.count))", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .navigationTitle("Срок годности")
+        .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+private struct ExpiryItemRow: View {
+    let item: InventoryItem
+    let isExpired: Bool
+
+    private var daysText: String {
+        guard let d = item.expiryDate else { return "" }
+        if isExpired {
+            let days = Calendar.current.dateComponents([.day], from: d, to: Date()).day ?? 0
+            return "Просрочено \(days) дн. назад"
+        } else {
+            let days = Calendar.current.dateComponents([.day], from: Date(), to: d).day ?? 0
+            return days == 0 ? "Истекает сегодня" : "Истекает через \(days) дн."
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: isExpired ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundStyle(isExpired ? .red : .orange)
+                .frame(width: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name).font(.headline)
+                Text(item.category).font(.caption).foregroundStyle(.secondary)
+                Text(daysText)
+                    .font(.caption.bold())
+                    .foregroundStyle(isExpired ? .red : .orange)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
+                    .font(.subheadline.bold())
+                if let d = item.expiryDate {
+                    Text(d.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

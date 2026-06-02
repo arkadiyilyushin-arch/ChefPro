@@ -370,6 +370,7 @@ struct ProductionPlanView: View {
     @State private var showAdd = false
     @State private var showExecuteAlert = false
     @State private var executedCount = 0
+    @State private var editMode: EditMode = .inactive
     @State private var showExecutedBanner = false
 
     private var totalCost: Double {
@@ -417,8 +418,8 @@ struct ProductionPlanView: View {
                         subtitle: "Добавьте блюда в план и нажмите «Выполнить»."
                     )
                 } else {
-                    ForEach(store.currentProductionPlan) { item in
-                        BigCard {
+                    List {
+                        ForEach(store.currentProductionPlan) { item in
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.dishName).font(.headline)
@@ -433,23 +434,23 @@ struct ProductionPlanView: View {
                                     }
                                 }
                                 Spacer()
-                                VStack(alignment: .trailing, spacing: 6) {
-                                    Text("\(item.portions) порц.")
-                                        .font(.title3.bold()).foregroundStyle(.chefAccent)
-                                    Button {
-                                        store.removePlanItem(item)
-                                    } label: {
-                                        Image(systemName: "trash").foregroundStyle(.red).font(.caption)
-                                    }
-                                }
+                                Text("\(item.portions) порц.")
+                                    .font(.title3.bold()).foregroundStyle(.chefAccent)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    store.removePlanItem(item)
+                                } label: { Label("Удалить", systemImage: "trash") }
                             }
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                store.removePlanItem(item)
-                            } label: { Label("Удалить", systemImage: "trash") }
+                        .onMove { from, to in
+                            store.currentProductionPlan.move(fromOffsets: from, toOffset: to)
                         }
                     }
+                    .listStyle(.plain)
+                    .frame(minHeight: CGFloat(store.currentProductionPlan.count) * 72)
+                    .environment(\.editMode, $editMode)
+                    .onAppear { editMode = .active }
 
                     BigActionButton(title: "Выполнить план", icon: "flame.fill") {
                         showExecuteAlert = true

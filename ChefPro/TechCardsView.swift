@@ -183,6 +183,18 @@ struct TechCardsView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    if let url = PDFReportGenerator.createTechCardPDF(dish: dish, store: store) {
+                                        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                           let root = scene.windows.first?.rootViewController {
+                                            root.present(av, animated: true)
+                                        }
+                                    }
+                                } label: { Label("Поделиться", systemImage: "square.and.arrow.up") }
+                                    .tint(.blue)
+                            }
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     let deletedDish = dish

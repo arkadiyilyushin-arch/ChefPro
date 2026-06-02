@@ -1,4 +1,72 @@
 import SwiftUI
+import Speech
+import AVFoundation
+
+// MARK: - Voice Input Helper
+
+@MainActor
+final class VoiceInputController: ObservableObject {
+    @Published var isRecording = false
+    @Published var transcript  = ""
+    @Published var error: String?
+
+    private var recognizer: SFSpeechRecognizer?
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var task: SFSpeechRecognitionTask?
+    private let engine = AVAudioEngine()
+
+    func toggle(locale: Locale = Locale(identifier: "ru-RU")) {
+        isRecording ? stop() : start(locale: locale)
+    }
+
+    private func start(locale: Locale) {
+        SFSpeechRecognizer.requestAuthorization { [weak self] status in
+            guard let self, status == .authorized else {
+                Task { @MainActor in self?.error = "Нет разрешения на распознавание речи" }
+                return
+            }
+            Task { @MainActor in self.beginSession(locale: locale) }
+        }
+    }
+
+    private func beginSession(locale: Locale) {
+        recognizer = SFSpeechRecognizer(locale: locale)
+        request    = SFSpeechAudioBufferRecognitionRequest()
+        guard let request else { return }
+        request.shouldReportPartialResults = true
+
+        let node   = engine.inputNode
+        let format = node.outputFormat(forBus: 0)
+        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buf, _ in
+            request.append(buf)
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: .duckOthers)
+            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+            try engine.start()
+        } catch {
+            self.error = error.localizedDescription; return
+        }
+
+        task = recognizer?.recognitionTask(with: request) { [weak self] result, err in
+            guard let self else { return }
+            if let result { Task { @MainActor in self.transcript = result.bestTranscription.formattedString } }
+            if err != nil { Task { @MainActor in self.stop() } }
+        }
+        isRecording = true
+    }
+
+    func stop() {
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        request?.endAudio()
+        task?.finish()
+        request = nil; task = nil
+        isRecording = false
+        try? AVAudioSession.sharedInstance().setActive(false)
+    }
+}
 
 // MARK: - Write Offs
 
@@ -76,6 +144,7 @@ struct AddWriteOffView: View {
     @State private var reason          = "Порча"
     @State private var employee        = ""
     @State private var showSuggestions = false
+    @StateObject private var voice     = VoiceInputController()
 
     var onSave: (WriteOff) -> Void
     let units = ["кг", "г", "л", "мл", "шт"]
@@ -91,10 +160,31 @@ struct AddWriteOffView: View {
         NavigationStack {
             Form {
                 Section("Продукт") {
-                    TextField("Название продукта", text: $productName)
-                        .onChange(of: productName) { _, _ in
-                            showSuggestions = !productName.trimmingCharacters(in: .whitespaces).isEmpty
+                    HStack {
+                        TextField("Название продукта", text: $productName)
+                            .onChange(of: productName) { _, _ in
+                                showSuggestions = !productName.trimmingCharacters(in: .whitespaces).isEmpty
+                            }
+                        Button {
+                            voice.toggle()
+                        } label: {
+                            Image(systemName: voice.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(voice.isRecording ? .red : .chefAccent)
                         }
+                        .buttonStyle(.plain)
+                    }
+                    .onChange(of: voice.transcript) { _, text in
+                        guard !text.isEmpty else { return }
+                        productName = text
+                        showSuggestions = true
+                        if !voice.isRecording { voice.transcript = "" }
+                    }
+                    if voice.isRecording {
+                        Label("Говорите…", systemImage: "waveform")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                     InventoryProductSuggestions(query: productName, show: $showSuggestions) { item in
                         productName = item.name
                         unit        = item.unit
@@ -280,6 +370,7 @@ struct ProductionPlanView: View {
     @State private var showAdd = false
     @State private var showExecuteAlert = false
     @State private var executedCount = 0
+    @State private var editMode: EditMode = .inactive
     @State private var showExecutedBanner = false
 
     private var totalCost: Double {
@@ -327,8 +418,8 @@ struct ProductionPlanView: View {
                         subtitle: "Добавьте блюда в план и нажмите «Выполнить»."
                     )
                 } else {
-                    ForEach(store.currentProductionPlan) { item in
-                        BigCard {
+                    List {
+                        ForEach(store.currentProductionPlan) { item in
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.dishName).font(.headline)
@@ -343,23 +434,23 @@ struct ProductionPlanView: View {
                                     }
                                 }
                                 Spacer()
-                                VStack(alignment: .trailing, spacing: 6) {
-                                    Text("\(item.portions) порц.")
-                                        .font(.title3.bold()).foregroundStyle(.chefAccent)
-                                    Button {
-                                        store.removePlanItem(item)
-                                    } label: {
-                                        Image(systemName: "trash").foregroundStyle(.red).font(.caption)
-                                    }
-                                }
+                                Text("\(item.portions) порц.")
+                                    .font(.title3.bold()).foregroundStyle(.chefAccent)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    store.removePlanItem(item)
+                                } label: { Label("Удалить", systemImage: "trash") }
                             }
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                store.removePlanItem(item)
-                            } label: { Label("Удалить", systemImage: "trash") }
+                        .onMove { from, to in
+                            store.currentProductionPlan.move(fromOffsets: from, toOffset: to)
                         }
                     }
+                    .listStyle(.plain)
+                    .frame(minHeight: CGFloat(store.currentProductionPlan.count) * 72)
+                    .environment(\.editMode, $editMode)
+                    .onAppear { editMode = .active }
 
                     BigActionButton(title: "Выполнить план", icon: "flame.fill") {
                         showExecuteAlert = true

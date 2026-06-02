@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
 
 // MARK: - Inventory Sort Order
 
@@ -14,8 +15,11 @@ enum InventorySortOrder: String, CaseIterable {
 
 struct InventoryView: View {
     @EnvironmentObject var store: ChefProStore
-    @State private var showAddItem  = false
-    @State private var showAudit    = false
+    @State private var showAddItem      = false
+    @State private var showAudit        = false
+    @State private var showCSVImport    = false
+    @State private var csvImportResult  = ""
+    @State private var showCSVResult    = false
     @State private var searchText = ""
     @State private var selectedCategory = "Все"
     @State private var showOnlyLowStock = false
@@ -186,6 +190,10 @@ struct InventoryView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
+                        Button { showCSVImport = true } label: {
+                            Image(systemName: "arrow.down.doc.fill")
+                                .font(.title3)
+                        }
                         Button { showAudit = true } label: {
                             Image(systemName: "list.clipboard.fill")
                                 .font(.title3)
@@ -204,6 +212,111 @@ struct InventoryView: View {
             .sheet(isPresented: $showAudit) {
                 NavigationStack {
                     InventoryAuditView().environmentObject(store)
+                }
+            }
+            .sheet(isPresented: $showCSVImport) {
+                CSVPriceImportView { result in
+                    csvImportResult = result
+                    showCSVResult = true
+                    store.applyCSVPriceImport(result)
+                }
+            }
+            .alert("Импорт цен", isPresented: $showCSVResult) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(csvImportResult)
+            }
+        }
+    }
+}
+
+// MARK: - CSV Price Import
+
+struct CSVPriceImportView: View {
+    @Environment(\.dismiss) var dismiss
+    var onImport: (String) -> Void
+
+    @State private var showPicker = false
+    @State private var previewLines: [String] = []
+    @State private var fileURL: URL?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                BigCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Формат CSV", systemImage: "doc.text").font(.headline)
+                        Text("Файл должен содержать две колонки через запятую или точку с запятой:")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Название продукта,Цена за единицу")
+                            .font(.system(.caption, design: .monospaced))
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Text("Например:\nМука пшеничная,45.50\nМасло сливочное,380")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+
+                if !previewLines.isEmpty {
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Предпросмотр (\(previewLines.count) строк)", systemImage: "eye")
+                                .font(.headline)
+                            ForEach(previewLines.prefix(5), id: \.self) { line in
+                                Text(line).font(.caption).foregroundStyle(.secondary)
+                            }
+                            if previewLines.count > 5 {
+                                Text("…и ещё \(previewLines.count - 5) строк").font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+
+                Button {
+                    showPicker = true
+                } label: {
+                    Label(fileURL == nil ? "Выбрать CSV файл" : "Выбрать другой файл", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.chefAccent.opacity(0.15))
+                        .foregroundStyle(.chefAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal)
+
+                if fileURL != nil {
+                    Button {
+                        onImport(previewLines.joined(separator: "\n"))
+                        dismiss()
+                    } label: {
+                        Label("Применить цены", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green.opacity(0.15))
+                            .foregroundStyle(.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .padding(.horizontal)
+                }
+
+                Spacer()
+            }
+            .padding(.top)
+            .navigationTitle("Импорт прайс-листа")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Закрыть") { dismiss() } }
+            }
+            .fileImporter(isPresented: $showPicker, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
+                guard let url = try? result.get() else { return }
+                fileURL = url
+                if let text = try? String(contentsOf: url, encoding: .utf8) {
+                    previewLines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
+                } else if let text = try? String(contentsOf: url, encoding: .windowsCP1251) {
+                    previewLines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
                 }
             }
         }

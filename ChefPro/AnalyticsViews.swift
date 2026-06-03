@@ -1192,3 +1192,398 @@ struct ProfitabilityRankingView: View {
         .navigationTitle("Рейтинг прибыльности")
     }
 }
+
+// MARK: - Food Cost по периодам
+
+struct FoodCostByPeriodView: View {
+    @EnvironmentObject var store: ChefProStore
+
+    enum Granularity: String, CaseIterable {
+        case week = "По неделям"
+        case month = "По месяцам"
+    }
+
+    @State private var granularity: Granularity = .week
+
+    private struct PeriodPoint: Identifiable {
+        let id = UUID()
+        let label: String
+        let date: Date
+        let pct: Double
+    }
+
+    private var points: [PeriodPoint] {
+        let cal = Calendar.current
+        let component: Calendar.Component = granularity == .week ? .weekOfYear : .month
+
+        // Group productions by period
+        let grouped = Dictionary(grouping: store.productions) { prod -> Date in
+            let comps = cal.dateComponents([.year, component], from: prod.date)
+            return cal.date(from: comps) ?? prod.date
+        }
+
+        return grouped.compactMap { (date, prods) -> PeriodPoint? in
+            // Total cost in period
+            let totalCost = prods.reduce(0.0) { $0 + $1.totalCost }
+            // Estimated revenue: use monthly plan proportionally
+            let days = granularity == .week ? 7.0 : Double(cal.range(of: .day, in: .month, for: date)?.count ?? 30)
+            let dailyRevenue = store.monthlyRevenuePlan / 30.0
+            let periodRevenue = dailyRevenue * days
+            guard periodRevenue > 0 else { return nil }
+            let pct = totalCost / periodRevenue * 100
+
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "ru_RU")
+            fmt.dateFormat = granularity == .week ? "d MMM" : "MMM yy"
+            return PeriodPoint(label: fmt.string(from: date), date: date, pct: pct)
+        }
+        .sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Picker("Период", selection: $granularity) {
+                    ForEach(Granularity.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                if points.isEmpty {
+                    EmptyStateView(icon: "chart.bar", title: "Нет данных",
+                                  subtitle: "Добавьте производства и плановую выручку в Настройках.")
+                } else {
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Food Cost %", systemImage: "percent").font(.headline)
+                            Text("Рассчитан как себестоимость производства / плановая выручка за период.")
+                                .font(.caption).foregroundStyle(.secondary)
+
+                            Chart(points) { p in
+                                BarMark(
+                                    x: .value("Период", p.label),
+                                    y: .value("FC%", p.pct)
+                                )
+                                .foregroundStyle(p.pct < 30 ? Color.green : p.pct < 40 ? Color.orange : Color.red)
+                                .cornerRadius(4)
+                                .annotation(position: .top) {
+                                    Text("\(Int(p.pct))%")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                RuleMark(y: .value("Порог", store.foodCostThreshold))
+                                    .lineStyle(StrokeStyle(dash: [5]))
+                                    .foregroundStyle(.red.opacity(0.6))
+                            }
+                            .chartXAxis {
+                                AxisMarks { v in
+                                    AxisValueLabel(orientation: .vertical) {
+                                        if let s = v.as(String.self) { Text(s).font(.caption2) }
+                                    }
+                                }
+                            }
+                            .frame(height: 220)
+
+                            HStack(spacing: 16) {
+                                legendDot(.green, "< 30%")
+                                legendDot(.orange, "30–40%")
+                                legendDot(.red, "> 40%")
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Rectangle().fill(.red.opacity(0.6))
+                                        .frame(width: 16, height: 2)
+                                    Text("Порог \(Int(store.foodCostThreshold))%")
+                                }
+                                .font(.caption)
+                            }
+                            .font(.caption)
+                        }
+                    }
+
+                    // Summary table
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Сводка", systemImage: "tablecells").font(.headline)
+                            Divider()
+                            ForEach(points.suffix(6)) { p in
+                                HStack {
+                                    Text(p.label).foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("\(p.pct, specifier: "%.1f")%")
+                                        .bold()
+                                        .foregroundStyle(p.pct < 30 ? .green : p.pct < 40 ? .orange : .red)
+                                }
+                                .font(.subheadline)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Color.chefBackground)
+        .navigationTitle("FC по периодам")
+    }
+
+    private func legendDot(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+        }
+    }
+}
+
+// MARK: - Топ-10 блюд по затратам
+
+struct TopDishCostView: View {
+    @EnvironmentObject var store: ChefProStore
+
+    private struct DishCost: Identifiable {
+        let id: UUID
+        let name: String
+        let category: String
+        let totalCost: Double
+        let portions: Int
+        let costPerPortion: Double
+        let foodCostPct: Double
+    }
+
+    private var topDishes: [DishCost] {
+        let grouped = Dictionary(grouping: store.productions) { $0.dishName }
+        return grouped.compactMap { (name, prods) -> DishCost? in
+            guard let dish = store.dishes.first(where: { $0.name == name }) else { return nil }
+            let total = prods.reduce(0.0) { $0 + $1.totalCost }
+            let portions = prods.reduce(0) { $0 + $1.portions }
+            let costPer = portions > 0 ? total / Double(portions) : 0
+            return DishCost(id: dish.id, name: name, category: dish.category,
+                            totalCost: total, portions: portions,
+                            costPerPortion: costPer, foodCostPct: store.foodCostPercent(dish))
+        }
+        .sorted { $0.totalCost > $1.totalCost }
+        .prefix(10)
+        .map { $0 }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if topDishes.isEmpty {
+                    EmptyStateView(icon: "flame", title: "Нет данных",
+                                  subtitle: "Добавьте производства чтобы увидеть топ по затратам.")
+                } else {
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Топ-10 по сумме затрат", systemImage: "flame.fill").font(.headline)
+                            Chart(topDishes) { d in
+                                BarMark(
+                                    x: .value("Сумма", d.totalCost),
+                                    y: .value("Блюдо", d.name)
+                                )
+                                .foregroundStyle(Color.chefAccent)
+                                .cornerRadius(4)
+                                .annotation(position: .trailing) {
+                                    Text("\(Int(d.totalCost)) ₽")
+                                        .font(.caption.bold()).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(height: max(200, CGFloat(topDishes.count) * 36))
+                        }
+                    }
+
+                    ForEach(Array(topDishes.enumerated()), id: \.element.id) { index, d in
+                        BigCard {
+                            HStack(spacing: 12) {
+                                Text("\(index + 1)")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(index < 3 ? Color.chefAccent : .secondary)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(d.name).font(.headline)
+                                    Text(d.category).font(.caption).foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("\(d.totalCost, specifier: "%.0f") ₽")
+                                        .font(.headline.bold())
+                                    Text("\(d.portions) порц. • FC \(d.foodCostPct, specifier: "%.0f")%")
+                                        .font(.caption)
+                                        .foregroundStyle(d.foodCostPct > store.foodCostThreshold ? .red : .secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Color.chefBackground)
+        .navigationTitle("Топ затрат")
+    }
+}
+
+// MARK: - План vs Факт
+
+struct PlanVsFactView: View {
+    @EnvironmentObject var store: ChefProStore
+
+    enum Period: String, CaseIterable { case week = "Неделя"; case month = "Месяц" }
+    @State private var period: Period = .month
+
+    private var since: Date {
+        let cal = Calendar.current
+        switch period {
+        case .week:  return cal.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        case .month: return Date().startOfMonth()
+        }
+    }
+
+    private var factor: Double { period == .week ? 7.0 / 30.0 : 1.0 }
+
+    // План
+    private var planRevenue: Double { store.monthlyRevenuePlan * factor }
+    private var planFoodCost: Double { planRevenue * store.monthlyFoodCostTarget / 100 }
+    private var planPurchases: Double { store.purchaseBudget * factor }
+
+    // Факт
+    private var factRevenue: Double {
+        store.sales.filter { $0.date >= since }.reduce(0.0) { total, sale in
+            let price = store.dishes.first(where: { $0.name == sale.dishName })?.salePrice ?? 0
+            return total + price * Double(sale.portions)
+        }
+    }
+    private var factFoodCost: Double {
+        store.productions.filter { $0.date >= since }.reduce(0.0) { $0 + $1.totalCost }
+    }
+    private var factPurchases: Double {
+        store.deliveries.filter { $0.date >= since }.reduce(0.0) { $0 + $1.price }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Picker("Период", selection: $period) {
+                    ForEach(Period.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                if store.monthlyRevenuePlan == 0 {
+                    BigCard {
+                        VStack(spacing: 8) {
+                            Image(systemName: "chart.bar.xaxis").font(.largeTitle).foregroundStyle(.secondary)
+                            Text("Установите плановую выручку и целевой Food Cost в Настройках")
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    }
+                } else {
+                    pvfRow(title: "Выручка", plan: planRevenue, fact: factRevenue,
+                           higherIsBetter: true, icon: "arrow.up.circle.fill")
+                    pvfRow(title: "Food Cost (себест.)", plan: planFoodCost, fact: factFoodCost,
+                           higherIsBetter: false, icon: "flame.fill")
+                    pvfRow(title: "Закупки", plan: planPurchases, fact: factPurchases,
+                           higherIsBetter: false, icon: "cart.fill")
+
+                    // Визуальное сравнение
+                    BigCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Label("Сравнение", systemImage: "chart.bar.fill").font(.headline)
+
+                            pvfBar(label: "Выручка", plan: planRevenue, fact: factRevenue, color: .green)
+                            pvfBar(label: "Food Cost", plan: planFoodCost, fact: factFoodCost, color: .orange)
+                            pvfBar(label: "Закупки", plan: planPurchases, fact: factPurchases, color: .blue)
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Color.chefBackground)
+        .navigationTitle("План vs Факт")
+    }
+
+    private func pvfRow(title: String, plan: Double, fact: Double, higherIsBetter: Bool, icon: String) -> some View {
+        let diff = fact - plan
+        let good = higherIsBetter ? diff >= 0 : diff <= 0
+        let pct = plan > 0 ? abs(diff) / plan * 100 : 0
+        return BigCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(title, systemImage: icon).font(.headline)
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("ПЛАН").font(.caption).foregroundStyle(.secondary)
+                        Text("\(plan, specifier: "%.0f") ₽").font(.title3.bold())
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing) {
+                        Text("ФАКТ").font(.caption).foregroundStyle(.secondary)
+                        Text("\(fact, specifier: "%.0f") ₽").font(.title3.bold())
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Label(
+                        "\(diff >= 0 ? "+" : "")\(diff, specifier: "%.0f") ₽ (\(pct, specifier: "%.1f")%)",
+                        systemImage: diff >= 0 ? "arrow.up" : "arrow.down"
+                    )
+                    .font(.subheadline.bold())
+                    .foregroundStyle(good ? .green : .red)
+                }
+                // Progress bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.15))
+                            .frame(height: 8)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(good ? Color.green : Color.red)
+                            .frame(width: plan > 0 ? min(geo.size.width * CGFloat(fact / plan), geo.size.width) : 0,
+                                   height: 8)
+                    }
+                }
+                .frame(height: 8)
+            }
+        }
+    }
+
+    private func pvfBar(label: String, plan: Double, fact: Double, color: Color) -> some View {
+        let maxVal = max(plan, fact, 1)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3).fill(color.opacity(0.2)).frame(height: 14)
+                        RoundedRectangle(cornerRadius: 3).fill(color.opacity(0.5))
+                            .frame(width: geo.size.width * CGFloat(plan / maxVal), height: 14)
+                    }
+                }
+                .frame(height: 14)
+                Text("П").font(.caption2).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3).fill(color.opacity(0.2)).frame(height: 14)
+                        RoundedRectangle(cornerRadius: 3).fill(color)
+                            .frame(width: geo.size.width * CGFloat(fact / maxVal), height: 14)
+                    }
+                }
+                .frame(height: 14)
+                Text("Ф").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - Date helpers
+
+private extension Date {
+    func startOfMonth() -> Date {
+        Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: self)) ?? self
+    }
+}
+

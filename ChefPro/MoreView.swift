@@ -127,6 +127,18 @@ struct MoreView: View {
                     } label: { Label("Динамика Food Cost", systemImage: "waveform.path.ecg") }
 
                     NavigationLink {
+                        FoodCostByPeriodView().environmentObject(store)
+                    } label: { Label("FC по неделям/месяцам", systemImage: "calendar.badge.clock") }
+
+                    NavigationLink {
+                        TopDishCostView().environmentObject(store)
+                    } label: { Label("Топ-10 затрат по блюдам", systemImage: "flame.fill") }
+
+                    NavigationLink {
+                        PlanVsFactView().environmentObject(store)
+                    } label: { Label("План vs Факт", systemImage: "chart.bar.xaxis") }
+
+                    NavigationLink {
                         PurchaseBudgetView().environmentObject(store)
                     } label: { Label("Бюджет закупок", systemImage: "chart.bar.doc.horizontal") }
 

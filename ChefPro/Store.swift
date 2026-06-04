@@ -148,11 +148,13 @@ final class ChefProStore: ObservableObject {
 
     // MARK: - Real-time employee sync
     private func startEmployeeSync() {
-        ChefProFirebaseService.shared.startEmployeeListener { [weak self] updated in
-            guard let self else { return }
-            self.isSyncingFromCloud = true
-            self.employees = updated
-            self.isSyncingFromCloud = false
+        Task { @MainActor in
+            ChefProFirebaseService.shared.startEmployeeListener { [weak self] updated in
+                guard let self else { return }
+                self.isSyncingFromCloud = true
+                self.employees = updated
+                self.isSyncingFromCloud = false
+            }
         }
     }
 

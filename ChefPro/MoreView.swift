@@ -4,453 +4,316 @@ import SwiftUI
 
 struct MoreView: View {
     @EnvironmentObject var store: ChefProStore
+    @State private var navPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
-            List {
-                // ── Профиль ──────────────────────────────────────
-                Section {
-                    NavigationLink {
-                        ProfileView().environmentObject(store)
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle().fill(Color.orange).frame(width: 36, height: 36)
-                                Text(String(store.profile.name.prefix(1)).uppercased())
-                                    .font(.subheadline.bold()).foregroundStyle(.white)
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(store.profile.name).font(.headline)
-                                Text(store.profile.position).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
+        NavigationStack(path: $navPath) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    MoreProfileCard(store: store)
+                    MoreQuickGrid(store: store)
+                    MoreSectionBlock(title: "Аналитика", color: .blue) {
+                        MoreRow("Аналитика",          icon: "chart.line.uptrend.xyaxis",         color: .blue)   { AnalyticsView().environmentObject(store) }
+                        MoreRow("Menu Engineering",   icon: "chart.bar.xaxis",                   color: .indigo) { MenuEngineeringView().environmentObject(store) }
+                        MoreRow("Продажи",            icon: "bag.fill",                          color: .green,  badge: store.sales.isEmpty ? nil : "\(store.sales.count)") { SalesView().environmentObject(store) }
+                        MoreRow("P&L",                icon: "chart.line.uptrend.xyaxis.circle.fill", color: .teal) { ProfitLossView().environmentObject(store) }
+                        MoreRow("Динамика Food Cost", icon: "waveform.path.ecg",                 color: .orange) { FoodCostTrendView().environmentObject(store) }
+                        MoreRow("FC по периодам",     icon: "calendar.badge.clock",              color: .cyan)   { FoodCostByPeriodView().environmentObject(store) }
+                        MoreRow("Топ-10 затрат",      icon: "flame.fill",                        color: .red)    { TopDishCostView().environmentObject(store) }
+                        MoreRow("План vs Факт",       icon: "chart.bar.xaxis",                   color: .purple) { PlanVsFactView().environmentObject(store) }
+                        MoreRow("Бюджет закупок",     icon: "chart.bar.doc.horizontal",          color: .blue)   { PurchaseBudgetView().environmentObject(store) }
+                        MoreRow("Поставщики",         icon: "building.2.crop.circle.fill",       color: .mint)   { SupplierAnalyticsView().environmentObject(store) }
+                        MoreRow("ABC-анализ склада",  icon: "chart.bar.doc.horizontal",          color: .indigo) { ABCAnalysisView().environmentObject(store) }
+                        MoreRow("Точка безубыточности", icon: "chart.line.uptrend.xyaxis",       color: .teal)   { BreakevenView().environmentObject(store) }
+                        MoreRow("Отчеты",             icon: "chart.bar.fill",                    color: .blue)   { PermissionGate(permission: "Отчеты") { ReportsView() }.environmentObject(store) }
+                        MoreRow("PDF-отчеты",         icon: "doc.richtext.fill",                 color: .red)    { PDFReportsView().environmentObject(store) }
+                        MoreRow("Отчёт по списаниям", icon: "chart.bar.doc.horizontal.fill",    color: .orange) { WriteOffReportView().environmentObject(store) }
+                        MoreRow("CSV-экспорт",        icon: "tablecells",                        color: .green)  { CSVExportView().environmentObject(store) }
+                        MoreRow("Прогноз закупок",    icon: "chart.line.downtrend.xyaxis",       color: .purple) { PurchaseForecastView().environmentObject(store) }
                     }
+                    MoreSectionBlock(title: "Инструменты", color: .orange) {
+                        MoreRow("Срок годности",       icon: "calendar.badge.exclamationmark", color: .red,
+                                badge: store.expiringItems.isEmpty ? nil : "\(store.expiringItems.count)") { ExpiryWatchlistView().environmentObject(store) }
+                        MoreRow("История движений",    icon: "clock.arrow.circlepath",         color: .blue)   { StockMovementsView().environmentObject(store) }
+                        MoreRow("Инвентаризация",      icon: "list.clipboard.fill",            color: .green)  { InventoryAuditView().environmentObject(store) }
+                        MoreRow("Шаблоны техкарт",     icon: "doc.text.fill",                  color: .indigo) { RecipeTemplatesView().environmentObject(store) }
+                        MoreRow("Калькулятор цены",    icon: "percent",                         color: .teal)   { PriceCalculatorView().environmentObject(store) }
+                        MoreRow("Калькулятор наценки", icon: "arrow.up.right.circle.fill",     color: .orange) { MarkupCalculatorView().environmentObject(store) }
+                        MoreRow("Рейтинг прибыльности",icon: "trophy.fill",                    color: .yellow) { ProfitabilityRankingView().environmentObject(store) }
+                        MoreRow("Галерея блюд",        icon: "photo.stack.fill",               color: .purple,
+                                badge: { let c = store.dishes.filter { $0.photoFilename != nil }.count; return c > 0 ? "\(c)" : nil }()) { DishGalleryView().environmentObject(store) }
+                        MoreRow("План производства",   icon: "calendar.badge.clock",           color: .blue,
+                                badge: store.currentProductionPlan.isEmpty ? nil : "\(store.currentProductionPlan.count)") { ProductionPlanView().environmentObject(store) }
+                        MoreRow("Цифровое меню",       icon: "menucard.fill",                  color: .mint)   { DigitalMenuView().environmentObject(store) }
+                        MoreRow("Поиск",               icon: "magnifyingglass",                 color: .gray)   { GlobalSearchView().environmentObject(store) }
+                        MoreRow("QR / Barcode",        icon: "barcode.viewfinder",             color: .black)  { BarcodeScannerView().environmentObject(store) }
+                        MoreRow("Конвертер единиц",    icon: "arrow.left.arrow.right",         color: .cyan)   { UnitConverterView() }
+                    }
+                    MoreSectionBlock(title: "Персонал", color: .purple) {
+                        MoreRow("График работы",        icon: "calendar.badge.clock",     color: .blue)   { WorkScheduleView().environmentObject(store) }
+                        MoreRow("Активность",           icon: "person.badge.clock.fill",  color: .indigo) { EmployeeActivityView().environmentObject(store) }
+                        MoreRow("Чеклист смены",        icon: "checklist",                color: .green,
+                                badge: {
+                                    let done = store.checklists.filter { $0.isCompleted }.count
+                                    let total = store.checklists.count
+                                    return total > 0 ? "\(done)/\(total)" : nil
+                                }()) { ShiftChecklistView().environmentObject(store) }
+                        MoreRow("Сборники меню",        icon: "books.vertical.fill",     color: .orange) { NavigationStack { MenuCollectionsView().environmentObject(store) } }
+                    }
+                    MoreSectionBlock(title: "Гости и сервис", color: .teal) {
+                        MoreRow("План зала",              icon: "rectangle.split.3x3.fill", color: .teal)   { FloorPlanView().environmentObject(store) }
+                        MoreRow("Бронирование",           icon: "calendar.badge.plus",      color: .blue,
+                                badge: {
+                                    let c = store.todayReservations.filter { $0.status == .confirmed }.count
+                                    return c > 0 ? "\(c)" : nil
+                                }()) { TableReservationView().environmentObject(store) }
+                        MoreRow("Программа лояльности",   icon: "star.circle.fill",         color: .yellow,
+                                badge: store.loyaltyCards.isEmpty ? nil : "\(store.loyaltyCards.count)") { LoyaltyView().environmentObject(store) }
+                        MoreRow("Интеграция с кассой",    icon: "server.rack",              color: .green,
+                                badge: store.posRecords.isEmpty ? nil : "\(store.posRecords.count)") { POSIntegrationView().environmentObject(store) }
+                    }
+                    MoreSectionBlock(title: "Закупки", color: .green) {
+                        MoreRow("Автозаказ",            icon: "cart.badge.plus",     color: .green,
+                                badge: store.purchaseList.isEmpty ? nil : "\(store.purchaseList.count)") { SupplierAutoOrderView().environmentObject(store) }
+                        MoreRow("Температурный журнал", icon: "thermometer.medium",  color: .orange,
+                                badge: store.temperatureLogs.contains(where: { $0.isCritical }) ? "!" : nil) { TemperatureLogView().environmentObject(store) }
+                    }
+                    MoreSectionBlock(title: "Управление", color: .gray) {
+                        MoreRow("Рестораны",      icon: "building.2.fill",                      color: .blue,
+                                badge: store.restaurantName.isEmpty ? nil : store.restaurantName) { RestaurantSwitcherView().environmentObject(store) }
+                        MoreRow("Поставщики",     icon: "truck.box.fill",                        color: .green)  { SuppliersView().environmentObject(store) }
+                        MoreRow("Сотрудники",     icon: "person.2.fill",                         color: .indigo) { PermissionGate(permission: "Настройки") { EmployeeListView() }.environmentObject(store) }
+                        MoreRow("Синхронизация",  icon: "arrow.triangle.2.circlepath.circle.fill", color: .teal,
+                                badge: store.isSyncing ? "…" : store.syncError != nil ? "!" : nil) { SyncView().environmentObject(store) }
+                        MoreRow("Резервная копия",icon: "externaldrive.fill",                    color: .orange) { BackupView().environmentObject(store) }
+                        MoreRow("Настройки",      icon: "gearshape.fill",                        color: .gray)   { PermissionGate(permission: "Настройки") { SettingsView() }.environmentObject(store) }
+                    }
+
+                    Spacer(minLength: 32)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Ещё")
+        }
+    }
+}
 
-                // ── Операции ────────────────────────────────────
-                Section("Операции") {
-                    NavigationLink {
-                        ShiftView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Смена", systemImage: "clock.badge.checkmark.fill")
-                            Spacer()
-                            if store.currentShift != nil {
-                                Text("Открыта")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.green.opacity(0.15))
-                                    .foregroundStyle(.green)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
+// MARK: - Profile Card
 
-                    NavigationLink {
-                        KitchenBoardView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Kitchen Board", systemImage: "rectangle.3.group.fill")
-                            Spacer()
-                            if store.kitchenOrders.contains(where: { $0.status != .ready }) {
-                                Text("\(store.kitchenOrders.filter { $0.status != .ready }.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.orange.opacity(0.2))
-                                    .foregroundStyle(.orange)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
+private struct MoreProfileCard: View {
+    let store: ChefProStore
 
-                    NavigationLink {
-                        StopGoListView().environmentObject(store)
-                    } label: { Label("Стоп / Гоу лист", systemImage: "list.bullet.rectangle.portrait.fill") }
-
-                    NavigationLink {
-                        WaiterModeView().environmentObject(store)
-                    } label: { Label("Режим официанта", systemImage: "person.wave.2.fill") }
-
-                    NavigationLink {
-                        PermissionGate(permission: "Списания") { WriteOffsView() }
-                            .environmentObject(store)
-                    } label: { Label("Списания", systemImage: "trash.fill") }
-
-                    NavigationLink {
-                        KitchenModeView().environmentObject(store)
-                    } label: { Label("Kitchen Mode", systemImage: "flame.fill") }
-
-                    NavigationLink {
-                        PurchasesView().environmentObject(store)
-                    } label: { Label("Закупки", systemImage: "cart.fill") }
+    var body: some View {
+        NavigationLink {
+            ProfileView().environmentObject(store)
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 52, height: 52)
+                    Text(String(store.profile.name.prefix(1)).uppercased())
+                        .font(.title3.bold()).foregroundStyle(.white)
                 }
-
-                // ── Аналитика ───────────────────────────────────
-                Section("Аналитика") {
-                    NavigationLink {
-                        AnalyticsView().environmentObject(store)
-                    } label: { Label("Аналитика", systemImage: "chart.line.uptrend.xyaxis") }
-
-                    NavigationLink {
-                        SupplierAnalyticsView().environmentObject(store)
-                    } label: { Label("Аналитика поставщиков", systemImage: "building.2.crop.circle.fill") }
-
-                    NavigationLink {
-                        MenuEngineeringView().environmentObject(store)
-                    } label: { Label("Menu Engineering", systemImage: "chart.bar.xaxis") }
-
-                    NavigationLink {
-                        SalesView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Продажи", systemImage: "bag.fill")
-                            Spacer()
-                            if !store.sales.isEmpty {
-                                Text("\(store.sales.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.green.opacity(0.15))
-                                    .foregroundStyle(.green)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        PermissionGate(permission: "Отчеты") { ReportsView() }
-                            .environmentObject(store)
-                    } label: { Label("Отчеты", systemImage: "chart.bar.fill") }
-
-                    NavigationLink {
-                        ProfitLossView().environmentObject(store)
-                    } label: { Label("P&L", systemImage: "chart.line.uptrend.xyaxis.circle.fill") }
-
-                    NavigationLink {
-                        FoodCostTrendView().environmentObject(store)
-                    } label: { Label("Динамика Food Cost", systemImage: "waveform.path.ecg") }
-
-                    NavigationLink {
-                        FoodCostByPeriodView().environmentObject(store)
-                    } label: { Label("FC по неделям/месяцам", systemImage: "calendar.badge.clock") }
-
-                    NavigationLink {
-                        TopDishCostView().environmentObject(store)
-                    } label: { Label("Топ-10 затрат по блюдам", systemImage: "flame.fill") }
-
-                    NavigationLink {
-                        PlanVsFactView().environmentObject(store)
-                    } label: { Label("План vs Факт", systemImage: "chart.bar.xaxis") }
-
-                    NavigationLink {
-                        PurchaseBudgetView().environmentObject(store)
-                    } label: { Label("Бюджет закупок", systemImage: "chart.bar.doc.horizontal") }
-
-                    NavigationLink {
-                        PDFReportsView().environmentObject(store)
-                    } label: { Label("PDF-отчеты", systemImage: "doc.richtext.fill") }
-
-                    NavigationLink {
-                        WriteOffReportView().environmentObject(store)
-                    } label: { Label("Отчёт по списаниям", systemImage: "chart.bar.doc.horizontal.fill") }
-
-                    NavigationLink {
-                        CSVExportView().environmentObject(store)
-                    } label: { Label("CSV-экспорт", systemImage: "tablecells") }
-
-                    NavigationLink {
-                        PurchaseForecastView().environmentObject(store)
-                    } label: { Label("Прогноз закупок", systemImage: "chart.line.downtrend.xyaxis") }
-
-                    NavigationLink {
-                        BreakevenView().environmentObject(store)
-                    } label: { Label("Точка безубыточности", systemImage: "chart.line.uptrend.xyaxis") }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(store.profile.name).font(.headline).foregroundStyle(.primary)
+                    Text(store.profile.position).font(.subheadline).foregroundStyle(.secondary)
                 }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+}
 
-                // ── Инструменты ─────────────────────────────────
-                Section("Инструменты") {
-                    NavigationLink {
-                        ExpiryWatchlistView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Срок годности", systemImage: "calendar.badge.exclamationmark")
-                            Spacer()
-                            if !store.expiringItems.isEmpty {
-                                Text("\(store.expiringItems.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.red.opacity(0.15))
-                                    .foregroundStyle(.red)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
+// MARK: - Quick Launch Grid
 
-                    NavigationLink {
-                        StockMovementsView().environmentObject(store)
-                    } label: { Label("История движений", systemImage: "clock.arrow.circlepath") }
+private struct MoreQuickGrid: View {
+    let store: ChefProStore
 
-                    NavigationLink {
-                        GlobalSearchView().environmentObject(store)
-                    } label: { Label("Поиск", systemImage: "magnifyingglass") }
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
-                    NavigationLink {
-                        RecipeTemplatesView().environmentObject(store)
-                    } label: { Label("Шаблоны техкарт", systemImage: "doc.text.fill") }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Быстрый доступ")
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.leading, 4)
 
-                    NavigationLink {
-                        PriceCalculatorView().environmentObject(store)
-                    } label: { Label("Калькулятор цены", systemImage: "percent") }
-
-                    NavigationLink {
-                        MarkupCalculatorView().environmentObject(store)
-                    } label: { Label("Калькулятор наценки", systemImage: "arrow.up.right.circle.fill") }
-
-                    NavigationLink {
-                        ProfitabilityRankingView().environmentObject(store)
-                    } label: { Label("Рейтинг прибыльности", systemImage: "trophy.fill") }
-
-                    NavigationLink {
-                        DishGalleryView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Галерея блюд", systemImage: "photo.stack.fill")
-                            Spacer()
-                            let cnt = store.dishes.filter { $0.photoFilename != nil }.count
-                            if cnt > 0 {
-                                Text("\(cnt)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.purple.opacity(0.15))
-                                    .foregroundStyle(.purple)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        ProductionPlanView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("План производства", systemImage: "calendar.badge.clock")
-                            Spacer()
-                            if !store.currentProductionPlan.isEmpty {
-                                Text("\(store.currentProductionPlan.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.blue.opacity(0.15))
-                                    .foregroundStyle(.blue)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        InventoryAuditView().environmentObject(store)
-                    } label: { Label("Инвентаризация", systemImage: "list.clipboard.fill") }
-
-                    NavigationLink {
-                        BarcodeScannerView().environmentObject(store)
-                    } label: { Label("QR / Barcode", systemImage: "barcode.viewfinder") }
-
-                    NavigationLink {
-                        UnitConverterView()
-                    } label: { Label("Конвертер единиц", systemImage: "arrow.left.arrow.right") }
-
-                    NavigationLink {
-                        DigitalMenuView().environmentObject(store)
-                    } label: { Label("Цифровое меню", systemImage: "menucard.fill") }
+            LazyVGrid(columns: columns, spacing: 12) {
+                QuickTile(icon: "clock.badge.checkmark.fill", label: "Смена", color: .green,
+                          badge: store.currentShift != nil ? "●" : nil) { ShiftView().environmentObject(store) }
+                QuickTile(icon: "rectangle.3.group.fill", label: "Kitchen Board", color: .orange,
+                          badge: {
+                              let c = store.kitchenOrders.filter { $0.status != .ready }.count
+                              return c > 0 ? "\(c)" : nil
+                          }()) { KitchenBoardView().environmentObject(store) }
+                QuickTile(icon: "list.bullet.rectangle.portrait.fill", label: "Стоп/Гоу", color: .red) {
+                    StopGoListView().environmentObject(store)
                 }
-
-                // ── Персонал ────────────────────────────────────
-                Section("Персонал") {
-                    NavigationLink {
-                        WorkScheduleView().environmentObject(store)
-                    } label: { Label("График работы", systemImage: "calendar.badge.clock") }
-
-                    NavigationLink {
-                        EmployeeActivityView().environmentObject(store)
-                    } label: { Label("Активность сотрудников", systemImage: "person.badge.clock.fill") }
-
-                    NavigationLink {
-                        ShiftChecklistView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Чеклист смены", systemImage: "checklist")
-                            Spacer()
-                            let done = store.checklists.filter { $0.isCompleted }.count
-                            let total = store.checklists.count
-                            if total > 0 {
-                                Text("\(done)/\(total)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(done == total ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
-                                    .foregroundStyle(done == total ? Color.green : Color.orange)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        NavigationStack {
-                            MenuCollectionsView().environmentObject(store)
-                        }
-                    } label: { Label("Сборники меню", systemImage: "books.vertical.fill") }
+                QuickTile(icon: "person.wave.2.fill", label: "Официант", color: .blue) {
+                    WaiterModeView().environmentObject(store)
                 }
-
-                // ── Закупки ─────────────────────────────────────
-                Section("Закупки") {
-                    NavigationLink {
-                        SupplierAutoOrderView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Автозаказ поставщикам", systemImage: "cart.badge.plus")
-                            Spacer()
-                            if !store.purchaseList.isEmpty {
-                                Text("\(store.purchaseList.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.red.opacity(0.15))
-                                    .foregroundStyle(.red)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        TemperatureLogView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Температурный журнал", systemImage: "thermometer.medium")
-                            Spacer()
-                            if store.temperatureLogs.contains(where: { $0.isCritical }) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.red)
-                                    .font(.caption)
-                            }
-                        }
-                    }
+                QuickTile(icon: "trash.fill", label: "Списания", color: .pink) {
+                    PermissionGate(permission: "Списания") { WriteOffsView() }.environmentObject(store)
                 }
-
-                // ── Новые модули ────────────────────────────────
-                Section("Гости и сервис") {
-                    NavigationLink {
-                        FloorPlanView().environmentObject(store)
-                    } label: { Label("План зала", systemImage: "rectangle.split.3x3.fill") }
-
-                    NavigationLink {
-                        TableReservationView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Бронирование столиков", systemImage: "calendar.badge.plus")
-                            Spacer()
-                            let todayCount = store.todayReservations.filter { $0.status == .confirmed }.count
-                            if todayCount > 0 {
-                                Text("\(todayCount)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.blue.opacity(0.15))
-                                    .foregroundStyle(.blue)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        LoyaltyView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Программа лояльности", systemImage: "star.circle.fill")
-                            Spacer()
-                            if !store.loyaltyCards.isEmpty {
-                                Text("\(store.loyaltyCards.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.yellow.opacity(0.2))
-                                    .foregroundStyle(.orange)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        POSIntegrationView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Интеграция с кассой", systemImage: "server.rack")
-                            Spacer()
-                            if !store.posRecords.isEmpty {
-                                Text("\(store.posRecords.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.green.opacity(0.15))
-                                    .foregroundStyle(.green)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                    }
+                QuickTile(icon: "cart.fill", label: "Закупки", color: .teal) {
+                    PurchasesView().environmentObject(store)
                 }
-
-                Section("Аналитика склада") {
-                    NavigationLink {
-                        ABCAnalysisView().environmentObject(store)
-                    } label: { Label("ABC-анализ склада", systemImage: "chart.bar.doc.horizontal") }
+                QuickTile(icon: "flame.fill", label: "Kitchen Mode", color: .indigo) {
+                    KitchenModeView().environmentObject(store)
                 }
-
-                // ── Управление ──────────────────────────────────
-                Section("Управление") {
-                    NavigationLink {
-                        RestaurantSwitcherView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Рестораны", systemImage: "building.2.fill")
-                            Spacer()
-                            Text(store.restaurantName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    NavigationLink {
-                        SuppliersView().environmentObject(store)
-                    } label: { Label("Поставщики", systemImage: "truck.box.fill") }
-
-                    NavigationLink {
-                        PermissionGate(permission: "Настройки") { EmployeeListView() }
-                            .environmentObject(store)
-                    } label: { Label("Сотрудники", systemImage: "person.2.fill") }
-
-                    NavigationLink {
-                        SyncView().environmentObject(store)
-                    } label: {
-                        HStack {
-                            Label("Синхронизация", systemImage: "arrow.triangle.2.circlepath.circle.fill")
-                            Spacer()
-                            if store.isSyncing {
-                                ProgressView().scaleEffect(0.7)
-                            } else if store.syncError != nil {
-                                Image(systemName: "exclamationmark.icloud")
-                                    .foregroundStyle(.orange).font(.caption)
-                            } else if store.lastSyncDate != nil {
-                                Image(systemName: "checkmark.icloud.fill")
-                                    .foregroundStyle(.green).font(.caption)
-                            }
-                        }
-                    }
-
-                    NavigationLink {
-                        BackupView().environmentObject(store)
-                    } label: { Label("Резервная копия", systemImage: "externaldrive.fill") }
-
-                    NavigationLink {
-                        PermissionGate(permission: "Настройки") { SettingsView() }
-                            .environmentObject(store)
-                    } label: { Label("Настройки", systemImage: "gearshape.fill") }
+                QuickTile(icon: "calendar.badge.exclamationmark", label: "Срок годности", color: .red,
+                          badge: store.expiringItems.isEmpty ? nil : "\(store.expiringItems.count)") {
+                    ExpiryWatchlistView().environmentObject(store)
+                }
+                QuickTile(icon: "magnifyingglass", label: "Поиск", color: .gray) {
+                    GlobalSearchView().environmentObject(store)
                 }
             }
-            .navigationTitle("Еще")
         }
+    }
+}
+
+private struct QuickTile<Destination: View>: View {
+    let icon: String
+    let label: String
+    let color: Color
+    var badge: String?
+    @ViewBuilder let destination: () -> Destination
+
+    var body: some View {
+        NavigationLink(destination: destination) {
+            VStack(spacing: 8) {
+                ZStack(alignment: .topTrailing) {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(color.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 44, height: 44)
+                    if let badge {
+                        Text(badge)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4).padding(.vertical, 2)
+                            .background(Color.red)
+                            .clipShape(Capsule())
+                            .offset(x: 6, y: -6)
+                    }
+                }
+                Text(label)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Section Block (collapsible)
+
+private struct MoreSectionBlock<Content: View>: View {
+    let title: String
+    let color: Color
+    @ViewBuilder let content: () -> Content
+    @State private var expanded = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3)) { expanded.toggle() }
+            } label: {
+                HStack {
+                    Text(title)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Divider().padding(.horizontal, 16)
+                content()
+            }
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// MARK: - More Row
+
+private struct MoreRow<Destination: View>: View {
+    let label: String
+    let icon: String
+    let color: Color
+    var badge: String?
+    @ViewBuilder let destination: () -> Destination
+
+    init(_ label: String, icon: String, color: Color, badge: String? = nil, @ViewBuilder destination: @escaping () -> Destination) {
+        self.label = label
+        self.icon = icon
+        self.color = color
+        self.badge = badge
+        self.destination = destination
+    }
+
+    var body: some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                    .overlay {
+                        Image(systemName: icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(color)
+                    }
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let badge {
+                    Text(badge)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.15))
+                        .foregroundStyle(.secondary)
+                        .clipShape(Capsule())
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+        }
+        .buttonStyle(.plain)
+
+        Divider().padding(.leading, 60)
     }
 }
 

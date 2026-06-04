@@ -55,33 +55,32 @@ struct InventoryView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Combined filter chips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
+                        Button { showOnlyLowStock.toggle() } label: {
+                            Label("На исходе", systemImage: "exclamationmark.triangle.fill")
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(showOnlyLowStock ? Color.orange : Color(.systemGray5))
+                                .foregroundStyle(showOnlyLowStock ? .white : .primary)
+                                .clipShape(Capsule())
+                        }
+                        Rectangle().fill(Color(.separator)).frame(width: 1, height: 22)
                         ForEach(categories, id: \.self) { cat in
                             Button { selectedCategory = cat } label: {
                                 Text(cat)
                                     .font(.subheadline.weight(.medium))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
-                                    .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
+                                    .foregroundStyle(selectedCategory == cat ? .white : .primary)
                                     .clipShape(Capsule())
                             }
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 16)
                 }
                 .padding(.vertical, 8)
-
-                Toggle(isOn: $showOnlyLowStock) {
-                    Label("Только заканчивается", systemImage: "exclamationmark.triangle.fill")
-                        .font(.headline)
-                }
-                .padding()
-                .background(Color.chefCard)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .padding(.horizontal)
-                .padding(.bottom, 8)
 
                 if filteredItems.isEmpty {
                     if store.inventoryItems.isEmpty {
@@ -102,40 +101,7 @@ struct InventoryView: View {
                                 InventoryDetailView(item: item)
                                     .environmentObject(store)
                             } label: {
-                                BigCard {
-                                    HStack(spacing: 14) {
-                                        Image(systemName: item.isLowStock ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                            .font(.title2)
-                                            .foregroundStyle(item.isLowStock ? .orange : .green)
-                                            .frame(width: 46, height: 46)
-                                            .background((item.isLowStock ? Color.orange : Color.green).opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                                        VStack(alignment: .leading, spacing: 7) {
-                                            Text(item.name)
-                                                .font(.title3)
-                                                .bold()
-                                                .foregroundStyle(.primary)
-                                            Text(item.category)
-                                                .foregroundStyle(.secondary)
-                                            Text("Цена: \(item.pricePerUnit, specifier: "%.2f") / \(item.unit)")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-
-                                        Spacer()
-
-                                        VStack(alignment: .trailing, spacing: 5) {
-                                            Text("\(item.quantity, specifier: "%.1f")")
-                                                .font(.title2)
-                                                .bold()
-                                                .foregroundStyle(.primary)
-                                            Text(item.unit)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal)
+                                InventoryItemRow(item: item)
                             }
                             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                             .listRowBackground(Color.clear)
@@ -227,6 +193,47 @@ struct InventoryView: View {
                 Text(csvImportResult)
             }
         }
+    }
+}
+
+private struct InventoryItemRow: View {
+    let item: InventoryItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill((item.isLowStock ? Color.orange : Color.green).opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: item.isLowStock ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(item.isLowStock ? .orange : .green)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                Text(item.category + " · " + String(format: "%.2f", item.pricePerUnit) + " / " + item.unit)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
+                Text(item.quantity.truncatingRemainder(dividingBy: 1) == 0
+                     ? String(format: "%.0f", item.quantity)
+                     : String(format: "%.1f", item.quantity))
+                    .font(.headline.bold())
+                    .foregroundStyle(item.isLowStock ? .orange : .primary)
+                Text(item.unit)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 

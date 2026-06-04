@@ -22,62 +22,70 @@ struct DishRowCard: View {
     }
 
     var body: some View {
-        BigCard {
-            HStack(spacing: 14) {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(fcColor.opacity(0.12))
+                    .frame(width: 40, height: 40)
                 Image(systemName: "fork.knife")
-                    .font(.title2)
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(fcColor)
-                    .frame(width: 44, height: 44)
-                    .background(fcColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
 
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 6) {
-                        Text(dish.name).font(.title3).bold()
-                            .foregroundStyle(dish.menuStatus == .removed ? Color.secondary : Color.primary)
-                        if dish.isFavorite {
-                            Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow)
-                        }
-                        if dish.menuStatus != .active {
-                            Image(systemName: dish.menuStatus.icon)
-                                .font(.caption).foregroundStyle(dish.menuStatus.color)
-                        }
-                        if dish.isStopListed {
-                            Text("СТОП").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.red.opacity(0.15)).foregroundStyle(.red).clipShape(Capsule())
-                        }
-                        if dish.isGoListed {
-                            Text("ГОУ").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.green.opacity(0.15)).foregroundStyle(.green).clipShape(Capsule())
-                        }
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(dish.name)
+                        .font(.subheadline.bold())
+                        .lineLimit(1)
+                        .foregroundStyle(dish.menuStatus == .removed ? Color.secondary : Color.primary)
+                    if dish.isFavorite {
+                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow)
                     }
-                    Text(dish.category).foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        Text("Себестоимость: \(cost, specifier: "%.2f")")
-                            .font(.subheadline).foregroundStyle(.primary)
-                        if dish.cookTime > 0 {
-                            Label("\(dish.cookTime) мин", systemImage: "timer")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    if dish.isStopListed {
+                        Text("СТОП").font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.red.opacity(0.15)).foregroundStyle(.red)
+                            .clipShape(Capsule())
                     }
-                    if !dish.allergens.isEmpty {
-                        Text(dish.allergens.joined(separator: ", "))
-                            .font(.caption2).foregroundStyle(.orange)
+                    if dish.isGoListed {
+                        Text("ГОУ").font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15)).foregroundStyle(.green)
+                            .clipShape(Capsule())
                     }
                 }
-
-                Spacer()
-
-                if dish.dishType != .semifinished && dish.salePrice > 0 {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("\(foodCostPct, specifier: "%.0f")%")
-                            .font(.title3).bold().foregroundStyle(fcColor)
-                        Text("Food cost").font(.caption).foregroundStyle(.secondary)
+                Text(dish.category)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(cost, format: .number.precision(.fractionLength(2)))
+                        .font(.caption.bold())
+                        .foregroundStyle(.primary)
+                    if dish.cookTime > 0 {
+                        Text("·")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Label("\(dish.cookTime) мин", systemImage: "timer")
+                            .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
             }
+
+            Spacer(minLength: 4)
+
+            if dish.dishType != .semifinished && dish.salePrice > 0 {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(foodCostPct, specifier: "%.0f")%")
+                        .font(.headline.bold())
+                        .foregroundStyle(fcColor)
+                    Text("FC").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -120,43 +128,51 @@ struct TechCardsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // MARK: Type Picker
-                Picker("Тип", selection: $selectedType) {
-                    ForEach(DishType.allCases, id: \.self) { t in
-                        Label(t.rawValue, systemImage: t.icon).tag(t)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-
+                // Combined filter chips: type | category | status
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
+                        ForEach(DishType.allCases, id: \.self) { t in
+                            Button { selectedType = t } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: t.icon)
+                                    Text(t.rawValue)
+                                }
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(selectedType == t ? Color.chefAccent : Color(.systemGray5))
+                                .foregroundStyle(selectedType == t ? .white : .primary)
+                                .clipShape(Capsule())
+                            }
+                        }
+                        Rectangle().fill(Color(.separator)).frame(width: 1, height: 22)
                         ForEach(categories, id: \.self) { cat in
                             Button { selectedCategory = cat } label: {
                                 Text(cat)
                                     .font(.subheadline.weight(.medium))
-                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(selectedCategory == cat ? Color.chefAccent : Color(.systemGray5))
-                                    .foregroundStyle(selectedCategory == cat ? Color.white : Color.primary)
+                                    .foregroundStyle(selectedCategory == cat ? .white : .primary)
                                     .clipShape(Capsule())
                             }
                         }
-                        Divider().frame(height: 24)
+                        Rectangle().fill(Color(.separator)).frame(width: 1, height: 22)
                         ForEach(DishMenuStatus.allCases, id: \.self) { status in
                             Button {
                                 selectedStatus = selectedStatus == status ? nil : status
                             } label: {
-                                Label(status.rawValue, systemImage: status.icon)
-                                    .font(.subheadline.weight(.medium))
-                                    .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(selectedStatus == status ? status.color : Color(.systemGray5))
-                                    .foregroundStyle(selectedStatus == status ? Color.white : Color.primary)
-                                    .clipShape(Capsule())
+                                HStack(spacing: 5) {
+                                    Image(systemName: status.icon)
+                                    Text(status.rawValue)
+                                }
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(selectedStatus == status ? status.color : Color(.systemGray5))
+                                .foregroundStyle(selectedStatus == status ? .white : .primary)
+                                .clipShape(Capsule())
                             }
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 16)
                 }
                 .padding(.vertical, 8)
 

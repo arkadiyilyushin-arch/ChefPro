@@ -350,12 +350,12 @@ struct DashboardView: View {
             HStack(spacing: 12) {
                 QuickActionButton(icon: "flame.fill",      label: "Производство", color: .orange) { showQuickProduce = true }
                 NavigationLink {
-                    AddWriteOffView().environmentObject(store)
+                    AddWriteOffView { writeOff in store.addWriteOff(writeOff) }.environmentObject(store)
                 } label: {
                     QuickActionLabel(icon: "trash.fill", label: "Списание", color: .red)
                 }
                 NavigationLink {
-                    AddDeliveryView().environmentObject(store)
+                    AddDeliveryView { deliveries in deliveries.forEach { store.addDelivery($0) } }.environmentObject(store)
                 } label: {
                     QuickActionLabel(icon: "tray.and.arrow.down.fill", label: "Приёмка", color: .blue)
                 }

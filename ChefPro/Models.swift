@@ -73,6 +73,8 @@ struct Dish: Identifiable, Codable {
     var proteins: Double = 0       // белки, г
     var fats: Double = 0           // жиры, г
     var carbs: Double = 0          // углеводы, г
+    var isStopListed: Bool = false     // Стоп-лист
+    var isGoListed:   Bool = false     // Гоу-лист
 }
 
 struct Sale: Identifiable, Codable {

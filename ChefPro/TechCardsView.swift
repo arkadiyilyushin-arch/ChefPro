@@ -42,6 +42,14 @@ struct DishRowCard: View {
                             Image(systemName: dish.menuStatus.icon)
                                 .font(.caption).foregroundStyle(dish.menuStatus.color)
                         }
+                        if dish.isStopListed {
+                            Text("СТОП").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.red.opacity(0.15)).foregroundStyle(.red).clipShape(Capsule())
+                        }
+                        if dish.isGoListed {
+                            Text("ГОУ").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.green.opacity(0.15)).foregroundStyle(.green).clipShape(Capsule())
+                        }
                     }
                     Text(dish.category).foregroundStyle(.secondary)
                     HStack(spacing: 8) {

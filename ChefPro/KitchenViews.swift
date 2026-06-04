@@ -16,20 +16,22 @@ struct KitchenBoardView: View {
     var cookingOrders: [KitchenOrder] { store.kitchenOrders.filter { $0.status == .cooking } }
     var readyOrders:   [KitchenOrder] { store.kitchenOrders.filter { $0.status == .ready } }
 
+    private var stopListCount: Int { store.dishes.filter { $0.isStopListed }.count }
+
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 14) {
-                        KanbanColumn(title: "Новые",      accent: .blue,   orders: newOrders,     now: now, columnHeight: geo.size.height - 16)
-                        KanbanColumn(title: "Готовятся",  accent: .orange, orders: cookingOrders, now: now, columnHeight: geo.size.height - 16)
-                        KanbanColumn(title: "Готово",     accent: .green,  orders: readyOrders,   now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Новые",     accent: .blue,   orders: newOrders,     now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готовятся", accent: .orange, orders: cookingOrders, now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готово",    accent: .green,  orders: readyOrders,   now: now, columnHeight: geo.size.height - 16)
                     }
                     .padding()
                     .frame(minHeight: geo.size.height)
                 }
             }
-            .background(Color.chefBackground)
+            .background(Color(.systemBackground))
             .navigationTitle("Kitchen Board")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,9 +48,24 @@ struct KitchenBoardView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAddOrder = true } label: {
-                        Image(systemName: "plus.circle.fill").font(.title2)
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 12) {
+                        NavigationLink {
+                            StopGoListView().environmentObject(store)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(stopListCount > 0 ? .red : .secondary)
+                                if stopListCount > 0 {
+                                    Text("\(stopListCount)")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                        }
+                        Button { showAddOrder = true } label: {
+                            Image(systemName: "plus.circle.fill").font(.title2)
+                        }
                     }
                 }
             }
@@ -73,6 +90,12 @@ struct KanbanColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Colored top border
+            RoundedRectangle(cornerRadius: 2)
+                .fill(accent)
+                .frame(height: 2)
+                .padding(.bottom, 10)
+
             // Column header
             HStack {
                 Text(title).font(.title3.bold())
@@ -92,9 +115,14 @@ struct KanbanColumn: View {
                 LazyVStack(spacing: 12) {
                     if orders.isEmpty {
                         RoundedRectangle(cornerRadius: 18)
-                            .fill(Color(.systemGray6))
-                            .frame(width: 272, height: 110)
-                            .overlay(Text("Пусто").foregroundStyle(.secondary))
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                            .foregroundStyle(Color(.systemGray4))
+                            .frame(width: 292, height: 110)
+                            .overlay(
+                                Text("Пусто")
+                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                            )
                     } else {
                         ForEach(orders) { order in
                             KitchenOrderCard(order: order, now: now)
@@ -106,7 +134,7 @@ struct KanbanColumn: View {
             }
             .frame(height: max(100, columnHeight - 52))
         }
-        .frame(width: 280, alignment: .top)
+        .frame(width: 300, alignment: .top)
     }
 }
 
@@ -114,6 +142,8 @@ struct KitchenOrderCard: View {
     @EnvironmentObject var store: ChefProStore
     let order: KitchenOrder
     let now: Date
+
+    private var statusAccent: Color { order.status.color }
 
     private var timerBase: Date {
         switch order.status {
@@ -159,89 +189,94 @@ struct KitchenOrderCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: 0) {
+            // Left accent border
+            RoundedRectangle(cornerRadius: 4)
+                .fill(statusAccent)
+                .frame(width: 4)
+                .padding(.vertical, 4)
 
-            // Header: dish name + timer
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 12) {
+
+                // Header: dish name + timer pill
+                HStack(alignment: .top) {
                     Text(order.dishName)
                         .font(.headline)
                         .lineLimit(2)
-                    if !order.tableNumber.isEmpty {
-                        Label("Стол \(order.tableNumber)", systemImage: "tablecells")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if order.course > 1 || !order.tableNumber.isEmpty {
-                        Text(order.courseName)
-                            .font(.caption.bold())
-                            .foregroundStyle(.orange)
-                    }
+                    Spacer()
+                    Text(timerString)
+                        .font(.system(.caption, design: .monospaced).bold())
+                        .foregroundStyle(timerColor)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(timerColor.opacity(0.12))
+                        .clipShape(Capsule())
                 }
-                Spacer()
-                Text(timerString)
-                    .font(.system(.subheadline, design: .monospaced).bold())
-                    .foregroundStyle(timerColor)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(timerColor.opacity(0.12))
-                    .clipShape(Capsule())
-            }
 
-            // Portions badge
-            HStack(spacing: 10) {
-                Text("\(order.portions)")
-                    .font(.system(size: 40, weight: .bold))
-                Text("порц.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-            }
-
-            // Note
-            if !order.note.isEmpty {
-                Text(order.note)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-
-            // Action button
-            if let next = order.status.next {
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    store.advanceOrderStatus(order)
-                } label: {
-                    Label(order.status.actionLabel, systemImage: next.icon)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(next.color)
-                        .foregroundStyle(.white)
-                        .font(.headline)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-            } else {
-                Button {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    store.archiveKitchenOrder(order)
-                } label: {
-                    Text("Закрыть заказ")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(.systemGray5))
+                // Portions + table
+                HStack(spacing: 8) {
+                    Text("\(order.portions)")
+                        .font(.system(size: 36, weight: .bold))
+                    Text("порц.")
+                        .font(.title3)
                         .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding(.top, 6)
+                    Spacer()
+                    if !order.tableNumber.isEmpty {
+                        Text("Стол \(order.tableNumber)")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Color(.systemGray5))
+                            .foregroundStyle(.primary)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                // Note
+                if !order.note.isEmpty {
+                    Text(order.note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
+                // Action button
+                if let next = order.status.next {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        store.advanceOrderStatus(order)
+                    } label: {
+                        Label(order.status.actionLabel, systemImage: next.icon)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(next.color)
+                            .foregroundStyle(.white)
+                            .font(.headline)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                } else {
+                    Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        store.archiveKitchenOrder(order)
+                    } label: {
+                        Text("Закрыть заказ")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.systemGray5))
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
                 }
             }
+            .padding(14)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 3)
-        .frame(width: 280)
+        .shadow(color: .black.opacity(0.07), radius: 8, x: 0, y: 3)
+        .frame(width: 292)
     }
 }
 
@@ -251,13 +286,12 @@ struct AddKitchenOrderView: View {
 
     @State private var selectedDishID: UUID? = nil
     @State private var dishName    = ""
-    @State private var portions    = "1"
+    @State private var portions    = 1
     @State private var tableNumber = ""
     @State private var note        = ""
 
     private var canSave: Bool {
-        !dishName.trimmingCharacters(in: .whitespaces).isEmpty &&
-        (Int(portions) ?? 0) >= 1
+        !dishName.trimmingCharacters(in: .whitespaces).isEmpty && portions >= 1
     }
 
     var body: some View {
@@ -281,16 +315,33 @@ struct AddKitchenOrderView: View {
                 }
 
                 Section("Детали") {
-                    HStack {
-                        Text("Порций")
-                        Spacer()
-                        TextField("1", text: $portions)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
-                            .onChange(of: portions) { _, v in
-                                if v.count > 3 { portions = String(v.prefix(3)) }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Порций")
+                            Spacer()
+                            Text("\(portions)")
+                                .font(.headline.bold())
+                                .foregroundStyle(Color.chefAccent)
+                        }
+                        // Portions picker - horizontal scroll of chips 1..20
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(1...20, id: \.self) { n in
+                                    Button {
+                                        portions = n
+                                    } label: {
+                                        Text("\(n)")
+                                            .font(.headline.bold())
+                                            .frame(width: 44, height: 44)
+                                            .background(portions == n ? Color.chefAccent : Color(.systemGray5))
+                                            .foregroundStyle(portions == n ? .white : .primary)
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
+                            .padding(.vertical, 4)
+                        }
                     }
                     HStack {
                         Text("Стол")
@@ -317,12 +368,88 @@ struct AddKitchenOrderView: View {
     private func save() {
         let order = KitchenOrder(
             dishName:    dishName.trimmingCharacters(in: .whitespaces),
-            portions:    Int(portions) ?? 1,
+            portions:    portions,
             tableNumber: tableNumber.trimmingCharacters(in: .whitespaces),
             note:        note.trimmingCharacters(in: .whitespaces)
         )
         store.addKitchenOrder(order)
         dismiss()
+    }
+}
+
+// MARK: - Стоп-лист / Гоу-лист
+
+struct StopGoListView: View {
+    @EnvironmentObject var store: ChefProStore
+    @State private var search = ""
+
+    private var filtered: [Dish] {
+        let q = search.lowercased()
+        return store.dishes.filter { q.isEmpty || $0.name.lowercased().contains(q) }
+    }
+
+    var body: some View {
+        List(filtered) { dish in
+            StopGoRow(dish: dish)
+                .environmentObject(store)
+        }
+        .listStyle(.insetGrouped)
+        .searchable(text: $search, prompt: "Поиск блюда")
+        .navigationTitle("Стоп / Гоу лист")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct StopGoRow: View {
+    @EnvironmentObject var store: ChefProStore
+    let dish: Dish
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(dish.name).font(.headline)
+                Text(dish.category).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            // STOP toggle
+            Button {
+                var d = dish
+                d.isStopListed.toggle()
+                if d.isStopListed { d.isGoListed = false }
+                store.updateDish(d)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: dish.isStopListed ? "xmark.circle.fill" : "xmark.circle")
+                    Text("Стоп")
+                        .font(.caption.bold())
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(dish.isStopListed ? Color.red : Color(.systemGray5))
+                .foregroundStyle(dish.isStopListed ? .white : .secondary)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            // GO toggle
+            Button {
+                var d = dish
+                d.isGoListed.toggle()
+                if d.isGoListed { d.isStopListed = false }
+                store.updateDish(d)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: dish.isGoListed ? "checkmark.circle.fill" : "checkmark.circle")
+                    Text("Гоу")
+                        .font(.caption.bold())
+                }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(dish.isGoListed ? Color.green : Color(.systemGray5))
+                .foregroundStyle(dish.isGoListed ? .white : .secondary)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
     }
 }
 

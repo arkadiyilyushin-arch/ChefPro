@@ -460,21 +460,80 @@ struct KitchenDishButton: View {
     let foodCostPct: Double
     let action: () -> Void
 
+    private var accentColor: Color {
+        dish.isStopListed ? .red : dish.isGoListed ? .green : .chefAccent
+    }
+
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                Image(systemName: "flame.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(Color.chefAccent)
+            VStack(alignment: .leading, spacing: 0) {
+                // Цветная полоска сверху
+                accentColor
+                    .frame(height: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .padding(.bottom, 12)
+
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(accentColor.opacity(0.15))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                    }
+                    if dish.isStopListed {
+                        Text("СТОП")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundStyle(.red)
+                            .clipShape(Capsule())
+                    } else if dish.isGoListed {
+                        Text("ГОУ")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15))
+                            .foregroundStyle(.green)
+                            .clipShape(Capsule())
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 10)
+
                 Text(dish.name)
-                    .font(.title3).bold().multilineTextAlignment(.leading)
-                Text("Food cost \(foodCostPct, specifier: "%.0f")%")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .padding(.bottom, 6)
+
+                Text(dish.category)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if dish.salePrice > 0 {
+                    HStack {
+                        Text("FC \(foodCostPct, specifier: "%.0f")%")
+                            .font(.caption.bold())
+                            .foregroundStyle(accentColor)
+                        Spacer()
+                        if dish.cookTime > 0 {
+                            Label("\(dish.cookTime) мин", systemImage: "timer")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-            .padding()
-            .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
-            .background(Color.chefCard)
-            .clipShape(RoundedRectangle(cornerRadius: 26))
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 160, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -483,26 +542,44 @@ struct KitchenDishButton: View {
 struct KitchenModeView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var selectedDish: Dish?
+    @State private var searchText = ""
 
-    let columns = [
-        GridItem(.adaptive(minimum: 160), spacing: 16)
-    ]
+    let columns = [GridItem(.adaptive(minimum: 160), spacing: 12)]
+
+    private var visibleDishes: [Dish] {
+        let base = store.dishes.filter { !$0.isStopListed }
+        if searchText.isEmpty { return base }
+        return base.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                BigCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Kitchen Mode")
-                            .font(.largeTitle)
-                            .bold()
-                        Text("Большие кнопки для кухни и работы в перчатках")
-                            .foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 16) {
+                // Статус-бар
+                HStack(spacing: 12) {
+                    KitchenStatChip(
+                        value: store.dishes.filter { $0.isGoListed }.count,
+                        label: "ГОУ",
+                        color: .green,
+                        icon: "checkmark.circle.fill"
+                    )
+                    KitchenStatChip(
+                        value: store.dishes.filter { $0.isStopListed }.count,
+                        label: "СТОП",
+                        color: .red,
+                        icon: "xmark.circle.fill"
+                    )
+                    KitchenStatChip(
+                        value: store.kitchenOrders.filter { $0.status != .ready }.count,
+                        label: "Заказов",
+                        color: .orange,
+                        icon: "tray.fill"
+                    )
+                    Spacer()
                 }
 
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(store.dishes) { dish in
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(visibleDishes) { dish in
                         KitchenDishButton(
                             dish: dish,
                             foodCostPct: store.foodCostPercent(dish),
@@ -510,18 +587,46 @@ struct KitchenModeView: View {
                         )
                     }
                 }
+
+                if visibleDishes.isEmpty {
+                    EmptyStateView(icon: "fork.knife", title: "Нет блюд", subtitle: "Все блюда в стоп-листе или склад пуст")
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                }
             }
-            .padding()
+            .padding(16)
         }
-        .background(Color.black.opacity(0.92))
-        .foregroundStyle(.white)
+        .background(Color(.systemGroupedBackground))
+        .searchable(text: $searchText, prompt: "Поиск блюда")
         .navigationTitle("Kitchen Mode")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear    { UIApplication.shared.isIdleTimerDisabled = true  }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .sheet(item: $selectedDish) { dish in
             ProduceDishView(dish: dish)
                 .environmentObject(store)
         }
+    }
+}
+
+private struct KitchenStatChip: View {
+    let value: Int
+    let label: String
+    let color: Color
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+            Text("\(value) \(label)")
+                .font(.caption.bold())
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
     }
 }
 

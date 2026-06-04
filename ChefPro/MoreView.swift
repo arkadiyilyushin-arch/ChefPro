@@ -65,6 +65,10 @@ struct MoreView: View {
                     }
 
                     NavigationLink {
+                        StopGoListView().environmentObject(store)
+                    } label: { Label("Стоп / Гоу лист", systemImage: "list.bullet.rectangle.portrait.fill") }
+
+                    NavigationLink {
                         WaiterModeView().environmentObject(store)
                     } label: { Label("Режим официанта", systemImage: "person.wave.2.fill") }
 

@@ -13,80 +13,80 @@ struct MoreView: View {
                     MoreProfileCard(store: store)
                     MoreQuickGrid(store: store)
                     MoreSectionBlock(title: "Аналитика", color: .blue) {
-                        MoreRow("Аналитика",          icon: "chart.line.uptrend.xyaxis",         color: .blue)   { AnalyticsView().environmentObject(store) }
-                        MoreRow("Menu Engineering",   icon: "chart.bar.xaxis",                   color: .indigo) { MenuEngineeringView().environmentObject(store) }
-                        MoreRow("Продажи",            icon: "bag.fill",                          color: .green,  badge: store.sales.isEmpty ? nil : "\(store.sales.count)") { SalesView().environmentObject(store) }
-                        MoreRow("P&L",                icon: "chart.line.uptrend.xyaxis.circle.fill", color: .teal) { ProfitLossView().environmentObject(store) }
-                        MoreRow("Динамика Food Cost", icon: "waveform.path.ecg",                 color: .orange) { FoodCostTrendView().environmentObject(store) }
-                        MoreRow("FC по периодам",     icon: "calendar.badge.clock",              color: .cyan)   { FoodCostByPeriodView().environmentObject(store) }
-                        MoreRow("Топ-10 затрат",      icon: "flame.fill",                        color: .red)    { TopDishCostView().environmentObject(store) }
-                        MoreRow("План vs Факт",       icon: "chart.bar.xaxis",                   color: .purple) { PlanVsFactView().environmentObject(store) }
-                        MoreRow("Бюджет закупок",     icon: "chart.bar.doc.horizontal",          color: .blue)   { PurchaseBudgetView().environmentObject(store) }
-                        MoreRow("Поставщики",         icon: "building.2.crop.circle.fill",       color: .mint)   { SupplierAnalyticsView().environmentObject(store) }
-                        MoreRow("ABC-анализ склада",  icon: "chart.bar.doc.horizontal",          color: .indigo) { ABCAnalysisView().environmentObject(store) }
-                        MoreRow("Точка безубыточности", icon: "chart.line.uptrend.xyaxis",       color: .teal)   { BreakevenView().environmentObject(store) }
-                        MoreRow("Отчеты",             icon: "chart.bar.fill",                    color: .blue)   { PermissionGate(permission: "Отчеты") { ReportsView() }.environmentObject(store) }
-                        MoreRow("PDF-отчеты",         icon: "doc.richtext.fill",                 color: .red)    { PDFReportsView().environmentObject(store) }
-                        MoreRow("Отчёт по списаниям", icon: "chart.bar.doc.horizontal.fill",    color: .orange) { WriteOffReportView().environmentObject(store) }
-                        MoreRow("CSV-экспорт",        icon: "tablecells",                        color: .green)  { CSVExportView().environmentObject(store) }
-                        MoreRow("Прогноз закупок",    icon: "chart.line.downtrend.xyaxis",       color: .purple) { PurchaseForecastView().environmentObject(store) }
+                        MoreRow("Аналитика",            icon: "chart.line.uptrend.xyaxis",          color: .blue) { AnalyticsView().environmentObject(store) }
+                        MoreRow("Menu Engineering",     icon: "chart.bar.xaxis",                    color: .blue) { MenuEngineeringView().environmentObject(store) }
+                        MoreRow("Продажи",              icon: "bag.fill",                           color: .blue, badge: store.sales.isEmpty ? nil : "\(store.sales.count)") { SalesView().environmentObject(store) }
+                        MoreRow("P&L",                  icon: "chart.line.uptrend.xyaxis.circle.fill", color: .blue) { ProfitLossView().environmentObject(store) }
+                        MoreRow("Динамика Food Cost",   icon: "waveform.path.ecg",                  color: .blue) { FoodCostTrendView().environmentObject(store) }
+                        MoreRow("FC по периодам",       icon: "calendar.badge.clock",               color: .blue) { FoodCostByPeriodView().environmentObject(store) }
+                        MoreRow("Топ-10 затрат",        icon: "flame.fill",                         color: .blue) { TopDishCostView().environmentObject(store) }
+                        MoreRow("План vs Факт",         icon: "chart.bar.xaxis",                    color: .blue) { PlanVsFactView().environmentObject(store) }
+                        MoreRow("Бюджет закупок",       icon: "chart.bar.doc.horizontal",           color: .blue) { PurchaseBudgetView().environmentObject(store) }
+                        MoreRow("Поставщики (аналит.)", icon: "building.2.crop.circle.fill",        color: .blue) { SupplierAnalyticsView().environmentObject(store) }
+                        MoreRow("ABC-анализ склада",    icon: "chart.bar.doc.horizontal",           color: .blue) { ABCAnalysisView().environmentObject(store) }
+                        MoreRow("Точка безубыточности", icon: "chart.line.uptrend.xyaxis",          color: .blue) { BreakevenView().environmentObject(store) }
+                        MoreRow("Отчеты",               icon: "chart.bar.fill",                     color: .blue) { PermissionGate(permission: "Отчеты") { ReportsView() }.environmentObject(store) }
+                        MoreRow("PDF-отчеты",           icon: "doc.richtext.fill",                  color: .blue) { PDFReportsView().environmentObject(store) }
+                        MoreRow("Отчёт по списаниям",   icon: "chart.bar.doc.horizontal.fill",      color: .blue) { WriteOffReportView().environmentObject(store) }
+                        MoreRow("CSV-экспорт",          icon: "tablecells",                         color: .blue) { CSVExportView().environmentObject(store) }
+                        MoreRow("Прогноз закупок",      icon: "chart.line.downtrend.xyaxis",        color: .blue) { PurchaseForecastView().environmentObject(store) }
                     }
                     MoreSectionBlock(title: "Инструменты", color: .orange) {
-                        MoreRow("Срок годности",       icon: "calendar.badge.exclamationmark", color: .red,
+                        MoreRow("Срок годности",        icon: "calendar.badge.exclamationmark", color: .orange,
                                 badge: store.expiringItems.isEmpty ? nil : "\(store.expiringItems.count)") { ExpiryWatchlistView().environmentObject(store) }
-                        MoreRow("История движений",    icon: "clock.arrow.circlepath",         color: .blue)   { StockMovementsView().environmentObject(store) }
-                        MoreRow("Инвентаризация",      icon: "list.clipboard.fill",            color: .green)  { InventoryAuditView().environmentObject(store) }
-                        MoreRow("Шаблоны техкарт",     icon: "doc.text.fill",                  color: .indigo) { RecipeTemplatesView().environmentObject(store) }
-                        MoreRow("Калькулятор цены",    icon: "percent",                         color: .teal)   { PriceCalculatorView().environmentObject(store) }
-                        MoreRow("Калькулятор наценки", icon: "arrow.up.right.circle.fill",     color: .orange) { MarkupCalculatorView().environmentObject(store) }
-                        MoreRow("Рейтинг прибыльности",icon: "trophy.fill",                    color: .yellow) { ProfitabilityRankingView().environmentObject(store) }
-                        MoreRow("Галерея блюд",        icon: "photo.stack.fill",               color: .purple,
+                        MoreRow("История движений",     icon: "clock.arrow.circlepath",         color: .orange) { StockMovementsView().environmentObject(store) }
+                        MoreRow("Инвентаризация",       icon: "list.clipboard.fill",            color: .orange) { InventoryAuditView().environmentObject(store) }
+                        MoreRow("Шаблоны техкарт",      icon: "doc.text.fill",                  color: .orange) { RecipeTemplatesView().environmentObject(store) }
+                        MoreRow("Калькулятор цены",     icon: "percent",                         color: .orange) { PriceCalculatorView().environmentObject(store) }
+                        MoreRow("Калькулятор наценки",  icon: "arrow.up.right.circle.fill",     color: .orange) { MarkupCalculatorView().environmentObject(store) }
+                        MoreRow("Рейтинг прибыльности", icon: "trophy.fill",                    color: .orange) { ProfitabilityRankingView().environmentObject(store) }
+                        MoreRow("Галерея блюд",         icon: "photo.stack.fill",               color: .orange,
                                 badge: { let c = store.dishes.filter { $0.photoFilename != nil }.count; return c > 0 ? "\(c)" : nil }()) { DishGalleryView().environmentObject(store) }
-                        MoreRow("План производства",   icon: "calendar.badge.clock",           color: .blue,
+                        MoreRow("План производства",    icon: "calendar.badge.clock",           color: .orange,
                                 badge: store.currentProductionPlan.isEmpty ? nil : "\(store.currentProductionPlan.count)") { ProductionPlanView().environmentObject(store) }
-                        MoreRow("Цифровое меню",       icon: "menucard.fill",                  color: .mint)   { DigitalMenuView().environmentObject(store) }
-                        MoreRow("Поиск",               icon: "magnifyingglass",                 color: .gray)   { GlobalSearchView().environmentObject(store) }
-                        MoreRow("QR / Barcode",        icon: "barcode.viewfinder",             color: .black)  { BarcodeScannerView().environmentObject(store) }
-                        MoreRow("Конвертер единиц",    icon: "arrow.left.arrow.right",         color: .cyan)   { UnitConverterView() }
+                        MoreRow("Цифровое меню",        icon: "menucard.fill",                  color: .orange) { DigitalMenuView().environmentObject(store) }
+                        MoreRow("Поиск",                icon: "magnifyingglass",                 color: .orange) { GlobalSearchView().environmentObject(store) }
+                        MoreRow("QR / Barcode",         icon: "barcode.viewfinder",             color: .orange) { BarcodeScannerView().environmentObject(store) }
+                        MoreRow("Конвертер единиц",     icon: "arrow.left.arrow.right",         color: .orange) { UnitConverterView() }
                     }
                     MoreSectionBlock(title: "Персонал", color: .purple) {
-                        MoreRow("График работы",        icon: "calendar.badge.clock",     color: .blue)   { WorkScheduleView().environmentObject(store) }
-                        MoreRow("Активность",           icon: "person.badge.clock.fill",  color: .indigo) { EmployeeActivityView().environmentObject(store) }
-                        MoreRow("Чеклист смены",        icon: "checklist",                color: .green,
+                        MoreRow("График работы",        icon: "calendar.badge.clock",       color: .purple) { WorkScheduleView().environmentObject(store) }
+                        MoreRow("Активность",           icon: "person.badge.clock.fill",    color: .purple) { EmployeeActivityView().environmentObject(store) }
+                        MoreRow("Чеклист смены",        icon: "checklist",                  color: .purple,
                                 badge: {
                                     let done = store.checklists.filter { $0.isCompleted }.count
                                     let total = store.checklists.count
                                     return total > 0 ? "\(done)/\(total)" : nil
                                 }()) { ShiftChecklistView().environmentObject(store) }
-                        MoreRow("Сборники меню",        icon: "books.vertical.fill",     color: .orange) { NavigationStack { MenuCollectionsView().environmentObject(store) } }
+                        MoreRow("Сборники меню",        icon: "books.vertical.fill",        color: .purple) { NavigationStack { MenuCollectionsView().environmentObject(store) } }
                     }
                     MoreSectionBlock(title: "Гости и сервис", color: .teal) {
-                        MoreRow("План зала",              icon: "rectangle.split.3x3.fill", color: .teal)   { FloorPlanView().environmentObject(store) }
-                        MoreRow("Бронирование",           icon: "calendar.badge.plus",      color: .blue,
+                        MoreRow("План зала",             icon: "rectangle.split.3x3.fill",  color: .teal) { FloorPlanView().environmentObject(store) }
+                        MoreRow("Бронирование",          icon: "calendar.badge.plus",       color: .teal,
                                 badge: {
                                     let c = store.todayReservations.filter { $0.status == .confirmed }.count
                                     return c > 0 ? "\(c)" : nil
                                 }()) { TableReservationView().environmentObject(store) }
-                        MoreRow("Программа лояльности",   icon: "star.circle.fill",         color: .yellow,
+                        MoreRow("Программа лояльности",  icon: "star.circle.fill",          color: .teal,
                                 badge: store.loyaltyCards.isEmpty ? nil : "\(store.loyaltyCards.count)") { LoyaltyView().environmentObject(store) }
-                        MoreRow("Интеграция с кассой",    icon: "server.rack",              color: .green,
+                        MoreRow("Интеграция с кассой",   icon: "server.rack",               color: .teal,
                                 badge: store.posRecords.isEmpty ? nil : "\(store.posRecords.count)") { POSIntegrationView().environmentObject(store) }
                     }
                     MoreSectionBlock(title: "Закупки", color: .green) {
-                        MoreRow("Автозаказ",            icon: "cart.badge.plus",     color: .green,
+                        MoreRow("Автозаказ",             icon: "cart.badge.plus",       color: .green,
                                 badge: store.purchaseList.isEmpty ? nil : "\(store.purchaseList.count)") { SupplierAutoOrderView().environmentObject(store) }
-                        MoreRow("Температурный журнал", icon: "thermometer.medium",  color: .orange,
+                        MoreRow("Температурный журнал",  icon: "thermometer.medium",    color: .green,
                                 badge: store.temperatureLogs.contains(where: { $0.isCritical }) ? "!" : nil) { TemperatureLogView().environmentObject(store) }
                     }
-                    MoreSectionBlock(title: "Управление", color: .gray) {
-                        MoreRow("Рестораны",      icon: "building.2.fill",                      color: .blue,
+                    MoreSectionBlock(title: "Управление", color: Color(.systemGray)) {
+                        MoreRow("Рестораны",      icon: "building.2.fill",                         color: Color(.systemGray),
                                 badge: store.restaurantName.isEmpty ? nil : store.restaurantName) { RestaurantSwitcherView().environmentObject(store) }
-                        MoreRow("Поставщики",     icon: "truck.box.fill",                        color: .green)  { SuppliersView().environmentObject(store) }
-                        MoreRow("Сотрудники",     icon: "person.2.fill",                         color: .indigo) { PermissionGate(permission: "Настройки") { EmployeeListView() }.environmentObject(store) }
-                        MoreRow("Синхронизация",  icon: "arrow.triangle.2.circlepath.circle.fill", color: .teal,
+                        MoreRow("Поставщики",     icon: "truck.box.fill",                           color: Color(.systemGray)) { SuppliersView().environmentObject(store) }
+                        MoreRow("Сотрудники",     icon: "person.2.fill",                            color: Color(.systemGray)) { PermissionGate(permission: "Настройки") { EmployeeListView() }.environmentObject(store) }
+                        MoreRow("Синхронизация",  icon: "arrow.triangle.2.circlepath.circle.fill",  color: Color(.systemGray),
                                 badge: store.isSyncing ? "…" : store.syncError != nil ? "!" : nil) { SyncView().environmentObject(store) }
-                        MoreRow("Резервная копия",icon: "externaldrive.fill",                    color: .orange) { BackupView().environmentObject(store) }
-                        MoreRow("Настройки",      icon: "gearshape.fill",                        color: .gray)   { PermissionGate(permission: "Настройки") { SettingsView() }.environmentObject(store) }
+                        MoreRow("Резервная копия",icon: "externaldrive.fill",                       color: Color(.systemGray)) { BackupView().environmentObject(store) }
+                        MoreRow("Настройки",      icon: "gearshape.fill",                           color: Color(.systemGray)) { PermissionGate(permission: "Настройки") { SettingsView() }.environmentObject(store) }
                     }
 
                     Spacer(minLength: 32)

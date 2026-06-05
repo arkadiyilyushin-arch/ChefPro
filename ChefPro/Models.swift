@@ -443,6 +443,56 @@ struct RecipeVersion: Identifiable, Codable {
     var notes: String = ""
 }
 
+// MARK: - Operating Expenses
+
+enum ExpenseCategory: String, Codable, CaseIterable {
+    case rent       = "Аренда"
+    case salary     = "Зарплата"
+    case utilities  = "Коммунальные"
+    case marketing  = "Маркетинг"
+    case equipment  = "Оборудование"
+    case other      = "Прочее"
+
+    var icon: String {
+        switch self {
+        case .rent:      return "house.fill"
+        case .salary:    return "person.2.fill"
+        case .utilities: return "bolt.fill"
+        case .marketing: return "megaphone.fill"
+        case .equipment: return "wrench.and.screwdriver.fill"
+        case .other:     return "ellipsis.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .rent:      return .blue
+        case .salary:    return .purple
+        case .utilities: return .orange
+        case .marketing: return .pink
+        case .equipment: return .teal
+        case .other:     return .gray
+        }
+    }
+}
+
+enum ExpenseRecurrence: String, Codable, CaseIterable {
+    case once    = "Разовый"
+    case monthly = "Ежемесячно"
+    case weekly  = "Еженедельно"
+    case yearly  = "Ежегодно"
+}
+
+struct OperatingExpense: Identifiable, Codable {
+    var id         = UUID()
+    var name:       String
+    var amount:     Double
+    var category:   ExpenseCategory
+    var recurrence: ExpenseRecurrence = .monthly
+    var date:       Date              = Date()
+    var notes:      String            = ""
+}
+
 // MARK: - Table Reservations
 
 enum ReservationStatus: String, Codable, CaseIterable {

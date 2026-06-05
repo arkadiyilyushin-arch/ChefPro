@@ -640,24 +640,46 @@ struct PurchaseItemCard: View {
 
     var body: some View {
         let recommended = max(item.minQuantity * 2 - item.quantity, item.minQuantity)
-        BigCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(item.name).font(.title3).bold()
-                    Spacer()
-                    Text("Нужно").font(.caption).foregroundStyle(.orange)
-                }
-                Text(item.category).foregroundStyle(.secondary)
-                HStack {
+        let orderLabel: String = {
+            if !item.orderUnit.isEmpty && item.orderUnitRatio > 0 {
+                let units = (recommended / item.orderUnitRatio).rounded(.up)
+                return "\(String(format: "%.0f", units)) \(item.orderUnit)"
+            }
+            return "\(String(format: "%.1f", recommended)) \(item.unit)"
+        }()
+
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.orange.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "cart.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.subheadline.bold()).lineLimit(1)
+                Text(item.category)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 4) {
                     Text("Остаток: \(item.quantity, specifier: "%.1f") \(item.unit)")
-                    Spacer()
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text("·").font(.caption2).foregroundStyle(.secondary)
                     Text("Мин: \(item.minQuantity, specifier: "%.1f") \(item.unit)")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                .font(.subheadline)
-                Text("Рекомендованный заказ: \(recommended, specifier: "%.1f") \(item.unit)")
-                    .font(.headline).foregroundStyle(Color.chefAccent)
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(orderLabel)
+                    .font(.subheadline.bold()).foregroundStyle(.chefAccent)
+                Text("заказать").font(.caption2).foregroundStyle(.secondary)
             }
         }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -671,31 +693,49 @@ struct PurchasesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 0) {
 
-                InfoCard(
-                    title: "К заказу",
-                    value: "\(totalCount)",
-                    subtitle: store.extraPurchaseItems.isEmpty
-                        ? "позиций (нехватка на складе)"
-                        : "\(store.purchaseList.count) авто + \(store.extraPurchaseItems.count) вручную",
-                    icon: "cart.fill"
-                )
+                // ── Summary chips ─────────────────────────────────
+                HStack(spacing: 10) {
+                    purchaseChip(icon: "cart.fill", label: "К заказу", value: "\(totalCount)", color: .orange)
+                    purchaseChip(icon: "exclamationmark.triangle.fill", label: "Авто", value: "\(store.purchaseList.count)", color: .red)
+                    purchaseChip(icon: "pencil.circle.fill", label: "Вручную", value: "\(store.extraPurchaseItems.count)", color: .blue)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
 
                 // ── Авто-список (нехватка) ────────────────────────
                 if !store.purchaseList.isEmpty {
-                    sectionHeader("Нехватка на складе", systemImage: "exclamationmark.triangle.fill", color: .orange)
-                    ForEach(store.purchaseList) { item in
-                        PurchaseItemCard(item: item)
+                    purchaseSectionHeader("Нехватка на складе", icon: "exclamationmark.triangle.fill", color: .orange, count: store.purchaseList.count)
+                    VStack(spacing: 0) {
+                        ForEach(store.purchaseList) { item in
+                            PurchaseItemCard(item: item)
+                            if item.id != store.purchaseList.last?.id {
+                                Divider().padding(.leading, 60)
+                            }
+                        }
                     }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
                 }
 
                 // ── Добавленные вручную ───────────────────────────
                 if !store.extraPurchaseItems.isEmpty {
-                    sectionHeader("Добавлено вручную", systemImage: "pencil.circle.fill", color: .blue)
-                    ForEach(store.extraPurchaseItems) { item in
-                        extraItemCard(item)
+                    purchaseSectionHeader("Добавлено вручную", icon: "pencil.circle.fill", color: .blue, count: store.extraPurchaseItems.count)
+                    VStack(spacing: 0) {
+                        ForEach(store.extraPurchaseItems) { item in
+                            extraItemCard(item)
+                            if item.id != store.extraPurchaseItems.last?.id {
+                                Divider().padding(.leading, 60)
+                            }
+                        }
                     }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
                 }
 
                 // ── Empty state ───────────────────────────────────
@@ -705,33 +745,54 @@ struct PurchasesView: View {
                         title: "Закупки не нужны",
                         subtitle: "Все продукты выше минимального остатка.\nДобавьте позиции вручную если нужно."
                     )
+                    .padding(.top, 40)
                 }
 
                 // ── Action buttons ────────────────────────────────
                 if totalCount > 0 {
-                    BigActionButton(title: "Сформировать заявку", icon: "square.and.arrow.up") {
-                        orderText = buildOrderText()
-                        showShare = true
-                    }
-
-                    if !store.extraPurchaseItems.isEmpty {
-                        Button(role: .destructive) {
-                            store.clearExtraPurchaseItems()
+                    VStack(spacing: 10) {
+                        Button {
+                            orderText = buildOrderText()
+                            showShare = true
                         } label: {
-                            Label("Очистить ручные позиции", systemImage: "trash")
+                            Label("Сформировать заявку", systemImage: "square.and.arrow.up")
+                                .font(.subheadline.bold())
                                 .frame(maxWidth: .infinity)
+                                .padding(.vertical, 13)
+                                .background(Color.orange)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+
+                        if !store.extraPurchaseItems.isEmpty {
+                            Button(role: .destructive) {
+                                store.clearExtraPurchaseItems()
+                            } label: {
+                                Label("Очистить ручные позиции", systemImage: "trash")
+                                    .font(.subheadline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                    .foregroundStyle(.red)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
                 }
 
-                Spacer(minLength: 40)
+                Spacer(minLength: 20)
             }
-            .padding()
+            .padding(.top, 4)
         }
-        .background(Color.chefBackground)
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Закупки")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -754,39 +815,71 @@ struct PurchasesView: View {
 
     // MARK: - Subviews
 
-    private func sectionHeader(_ title: String, systemImage: String, color: Color) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.bold())
-            .foregroundStyle(color)
-            .padding(.top, 4)
+    private func purchaseChip(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value).font(.subheadline.bold()).foregroundStyle(.primary)
+                Text(label).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func purchaseSectionHeader(_ title: String, icon: String, color: Color, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.caption).foregroundStyle(color)
+            Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
+            Spacer()
+            Text("\(count)").font(.caption2.bold())
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(color.opacity(0.15))
+                .foregroundStyle(color)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
     }
 
     private func extraItemCard(_ item: ExtraPurchaseItem) -> some View {
-        BigCard {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name).font(.headline)
-                    if !item.note.isEmpty {
-                        Text(item.note).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.blue)
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.blue.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "pencil.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.blue)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name).font(.subheadline.bold()).lineLimit(1)
+                if !item.note.isEmpty {
+                    Text(item.note).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                } else {
                     Text("вручную").font(.caption2).foregroundStyle(.secondary)
                 }
-                Button {
-                    store.removeExtraPurchaseItem(item)
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.red.opacity(0.7))
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
             }
+            Spacer()
+            Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
+                .font(.subheadline.bold())
+                .foregroundStyle(.blue)
+            Button {
+                store.removeExtraPurchaseItem(item)
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red.opacity(0.7))
+                    .font(.subheadline)
+                    .padding(8)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Order text

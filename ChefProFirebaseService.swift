@@ -6,7 +6,7 @@ import FirebaseFirestore
 final class ChefProFirebaseService: ObservableObject {
     static let shared = ChefProFirebaseService()
 
-    private let db = Firestore.firestore()
+    private nonisolated let db = Firestore.firestore()
 
     // ── Keys ─────────────────────────────────────────────────────────────
     private let restaurantIDKey = "chefpro_restaurant_id"

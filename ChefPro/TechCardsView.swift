@@ -336,146 +336,37 @@ struct DishDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                BigCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(currentDish.name)
-                            .font(.largeTitle)
-                            .bold()
-                        Text(currentDish.category)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                // ── Hero header ───────────────────────────────────
+                dishHero
 
-                        HStack {
+                VStack(alignment: .leading, spacing: 14) {
+                    // ── Stat chips ────────────────────────────────
+                    statChips
+
+                    // ── Status tags ───────────────────────────────
+                    statusTags
+
+                    // ── Missing ingredients warning ───────────────
+                    let missing = store.unmatchedIngredients(for: currentDish)
+                    if !missing.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Себестоимость")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(store.calculateDishCost(currentDish), specifier: "%.2f")")
-                                    .font(.title2)
-                                    .bold()
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                        .font(.system(size: 9))
-                                    Text("обновляется с ценами склада")
-                                        .font(.system(size: 10))
-                                }
-                                .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            if currentDish.dishType != .semifinished && store.hasFoodCostPercent(currentDish) {
-                                VStack(alignment: .trailing) {
-                                    Text("Food cost")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text("\(store.foodCostPercent(currentDish), specifier: "%.1f")%")
-                                        .font(.title2)
-                                        .bold()
-                                        .foregroundStyle(.chefAccent)
-                                }
+                                Text("Себестоимость занижена").font(.caption.bold()).foregroundStyle(.orange)
+                                Text(missing.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             }
                         }
-
-                        // Предупреждение об ингредиентах не найденных на складе
-                        let missing = store.unmatchedIngredients(for: currentDish)
-                        if !missing.isEmpty {
-                            Divider()
-                            VStack(alignment: .leading, spacing: 4) {
-                                Label("Не найдено на складе — себестоимость занижена", systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.orange)
-                                ForEach(missing, id: \.self) { name in
-                                    Text("· \(name)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        // История цен ключевых ингредиентов
-                        let ingredientsWithHistory = currentDish.ingredients.compactMap { ingredient -> (name: String, history: [PricePoint])? in
-                            guard let item = store.inventoryItems.first(where: { $0.name.lowercased() == ingredient.productName.lowercased() }),
-                                  item.priceHistory.count > 1 else { return nil }
-                            return (name: ingredient.productName, history: Array(item.priceHistory.suffix(3)))
-                        }
-                        if !ingredientsWithHistory.isEmpty {
-                            Divider()
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label("История цен", systemImage: "clock.arrow.circlepath")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.secondary)
-                                ForEach(ingredientsWithHistory.prefix(3), id: \.name) { entry in
-                                    let sorted = entry.history.sorted { $0.date < $1.date }
-                                    if sorted.count >= 2 {
-                                        let prev = sorted[sorted.count - 2]
-                                        let curr = sorted[sorted.count - 1]
-                                        HStack(spacing: 6) {
-                                            Text(entry.name)
-                                                .font(.caption)
-                                                .lineLimit(1)
-                                            Spacer()
-                                            Text("\(prev.price, specifier: "%.2f") → \(curr.price, specifier: "%.2f")")
-                                                .font(.caption)
-                                                .foregroundStyle(curr.price > prev.price ? .red : .green)
-                                            Text(curr.date.formatted(date: .abbreviated, time: .omitted))
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if currentDish.salePrice > 0 || currentDish.cookTime > 0 {
-                            HStack(spacing: 16) {
-                                if currentDish.salePrice > 0 {
-                                    Label("\(currentDish.salePrice, specifier: "%.2f") ₽", systemImage: "tag.fill")
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.primary)
-                                }
-                                if currentDish.cookTime > 0 {
-                                    Label("\(currentDish.cookTime) мин", systemImage: "timer")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                        }
-                        HStack(spacing: 6) {
-                            Image(systemName: currentDish.menuStatus.icon)
-                                .foregroundStyle(currentDish.menuStatus.color)
-                            Text(currentDish.menuStatus.rawValue)
-                                .font(.subheadline).foregroundStyle(currentDish.menuStatus.color)
-                            Spacer()
-                            Label(currentDish.dishType.rawValue, systemImage: currentDish.dishType.icon)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        if currentDish.portionWeight > 0 {
-                            HStack {
-                                Image(systemName: "scalemass")
-                                    .foregroundStyle(.chefAccent)
-                                Text("Выход: \(currentDish.portionWeight, specifier: "%.0f") \(currentDish.portionWeightUnit)")
-                                    .font(.subheadline.weight(.medium))
-                            }
-                        }
-
-                        if !currentDish.allergens.isEmpty {
-                            Divider()
-                            HStack(spacing: 6) {
-                                Image(systemName: "allergens").foregroundStyle(.orange)
-                                Text(currentDish.allergens.joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(.orange)
-                            }
-                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                }
 
-                if currentDish.calories > 0 || currentDish.proteins > 0 {
-                    BigCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label("Нутриенты на порцию", systemImage: "flame.fill")
-                                .font(.headline)
+                    // ── Nutrients ─────────────────────────────────
+                    if currentDish.calories > 0 || currentDish.proteins > 0 {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Нутриенты", systemImage: "flame.fill")
+                                .font(.subheadline.bold()).foregroundStyle(.secondary)
                             HStack(spacing: 0) {
                                 NutrientCell(value: currentDish.calories, unit: "ккал", label: "Калории", color: .orange)
                                 Divider()
@@ -485,153 +376,175 @@ struct DishDetailView: View {
                                 Divider()
                                 NutrientCell(value: currentDish.carbs, unit: "г", label: "Углев.", color: .green)
                             }
-                            .frame(height: 60)
+                            .frame(height: 56)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
                     }
-                }
 
-                if let photo = store.loadDishPhoto(for: currentDish) {
-                    Image(uiImage: photo)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                        .clipped()
-                        .cornerRadius(20)
-                }
-
-                SectionTitle(title: "Ингредиенты")
-
-                if currentDish.ingredients.isEmpty {
-                    BigCard {
-                        Text("Ингредиенты не добавлены")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    ForEach(currentDish.ingredients) { ingredient in
-                        BigCard {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 5) {
+                    // ── Ingredients ───────────────────────────────
+                    dishSectionHeader("Ингредиенты", count: currentDish.ingredients.count)
+                    if currentDish.ingredients.isEmpty {
+                        Text("Не добавлены").font(.subheadline).foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(currentDish.ingredients.enumerated()), id: \.element.id) { idx, ingredient in
+                                HStack(spacing: 10) {
                                     Text(ingredient.productName)
-                                        .font(.headline)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 4)
                                     Text("\(ingredient.quantity, specifier: "%.1f") \(ingredient.unit)")
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer()
-
-                                if let item = store.inventoryItems.first(where: { $0.name.lowercased() == ingredient.productName.lowercased() }) {
-                                    let converted = store.convert(quantity: ingredient.quantity, from: ingredient.unit, to: item.unit)
-                                    Text("\(converted * item.pricePerUnit, specifier: "%.2f")")
-                                        .font(.headline)
-                                        .foregroundStyle(.chefAccent)
-                                } else {
-                                    Text("нет на складе")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(.secondary)
+                                    if let item = store.inventoryItems.first(where: {
+                                        $0.name.lowercased() == ingredient.productName.lowercased()
+                                    }) {
+                                        let cost = store.convert(quantity: ingredient.quantity, from: ingredient.unit, to: item.unit) * item.pricePerUnit
+                                        Text(String(format: "%.2f", cost))
+                                            .font(.caption.bold())
+                                            .foregroundStyle(.chefAccent)
+                                            .frame(minWidth: 48, alignment: .trailing)
+                                    } else {
+                                        Text("нет")
+                                            .font(.caption2)
+                                            .foregroundStyle(.red)
+                                            .frame(minWidth: 48, alignment: .trailing)
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                if idx < currentDish.ingredients.count - 1 {
+                                    Divider().padding(.leading, 14)
                                 }
                             }
                         }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                }
 
-                if !currentDish.steps.isEmpty {
-                    SectionTitle(title: "Шаги приготовления (\(currentDish.steps.count))")
-
-                    ForEach(currentDish.steps) { step in
-                        BigCard {
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(spacing: 12) {
-                                    ZStack {
-                                        Circle().fill(Color.chefAccent).frame(width: 32, height: 32)
-                                        Text("\(step.stepNumber)")
-                                            .font(.subheadline.bold()).foregroundStyle(.white)
-                                    }
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(step.instruction)
-                                            .font(.subheadline)
-                                        if step.durationMinutes > 0 {
-                                            Label("\(step.durationMinutes) мин", systemImage: "timer")
-                                                .font(.caption).foregroundStyle(.secondary)
+                    // ── Steps ─────────────────────────────────────
+                    if !currentDish.steps.isEmpty {
+                        dishSectionHeader("Приготовление", count: currentDish.steps.count)
+                        VStack(spacing: 0) {
+                            ForEach(Array(currentDish.steps.enumerated()), id: \.element.id) { idx, step in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        ZStack {
+                                            Circle().fill(Color.chefAccent).frame(width: 26, height: 26)
+                                            Text("\(step.stepNumber)").font(.caption.bold()).foregroundStyle(.white)
                                         }
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(step.instruction).font(.subheadline)
+                                            if step.durationMinutes > 0 {
+                                                Label("\(step.durationMinutes) мин", systemImage: "timer")
+                                                    .font(.caption2).foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        Spacer(minLength: 0)
+                                    }
+                                    if !step.tip.isEmpty {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "lightbulb.fill").font(.caption2).foregroundStyle(.orange)
+                                            Text(step.tip).font(.caption).foregroundStyle(.orange)
+                                        }
+                                        .padding(.leading, 36)
+                                    }
+                                    if let img = store.loadStepPhoto(for: step) {
+                                        Image(uiImage: img)
+                                            .resizable().scaledToFill()
+                                            .frame(maxWidth: .infinity).frame(height: 140)
+                                            .clipped().cornerRadius(10)
+                                            .padding(.leading, 36)
                                     }
                                 }
-                                if let img = store.loadStepPhoto(for: step) {
-                                    Image(uiImage: img)
-                                        .resizable().scaledToFill()
-                                        .frame(maxWidth: .infinity).frame(height: 160)
-                                        .clipped().cornerRadius(12)
-                                }
-                                if !step.tip.isEmpty {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "lightbulb.fill").foregroundStyle(.orange)
-                                        Text(step.tip).font(.caption).foregroundStyle(.orange)
-                                    }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                if idx < currentDish.steps.count - 1 {
+                                    Divider().padding(.leading, 50)
                                 }
                             }
                         }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
 
-                    BigActionButton(title: "Режим приготовления", icon: "play.circle.fill") {
-                        showCookingMode = true
+                    // ── Price history ──────────────────────────────
+                    let priceHistory = currentDish.ingredients.compactMap { ing -> (name: String, prev: Double, curr: Double, date: Date)? in
+                        guard let item = store.inventoryItems.first(where: { $0.name.lowercased() == ing.productName.lowercased() }),
+                              item.priceHistory.count >= 2 else { return nil }
+                        let sorted = item.priceHistory.sorted { $0.date < $1.date }
+                        let prev = sorted[sorted.count - 2], curr = sorted[sorted.count - 1]
+                        return (ing.productName, prev.price, curr.price, curr.date)
                     }
-                }
-
-                BigActionButton(title: "Приготовить / списать", icon: "flame.fill") {
-                    showProduce = true
-                }
-
-                BigActionButton(title: "Масштабировать рецептуру", icon: "arrow.up.left.and.arrow.down.right") {
-                    showScaling = true
-                }
-
-                BigActionButton(title: "Экспорт техкарты в PDF", icon: "doc.richtext") {
-                    if let url = PDFReportGenerator.createTechCardPDF(dish: currentDish, store: store) {
-                        pdfURL = url
-                        showShareSheet = true
+                    if !priceHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Динамика цен", systemImage: "chart.line.uptrend.xyaxis")
+                                .font(.subheadline.bold()).foregroundStyle(.secondary)
+                            VStack(spacing: 0) {
+                                ForEach(Array(priceHistory.prefix(4).enumerated()), id: \.offset) { idx, entry in
+                                    HStack {
+                                        Text(entry.name).font(.caption).lineLimit(1)
+                                        Spacer()
+                                        Text("\(entry.prev, specifier: "%.2f") → \(entry.curr, specifier: "%.2f")")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(entry.curr > entry.prev ? .red : .green)
+                                        Text(entry.date.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    if idx < min(priceHistory.count, 4) - 1 { Divider().padding(.leading, 14) }
+                                }
+                            }
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
                     }
-                }
 
-                BigActionButton(title: "Печать", icon: "printer") {
-                    printTechCard()
-                }
+                    // ── Actions grid ──────────────────────────────
+                    dishSectionHeader("Действия", count: nil)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        DishActionCell(icon: "flame.fill",    label: "Приготовить",  color: .orange) { showProduce = true }
+                        DishActionCell(icon: "pencil",        label: "Редактировать", color: .blue)  { showEdit = true }
+                        DishActionCell(icon: "arrow.up.left.and.arrow.down.right", label: "Масштаб", color: .teal) { showScaling = true }
+                        DishActionCell(icon: "doc.richtext",  label: "PDF",          color: .red)   {
+                            if let url = PDFReportGenerator.createTechCardPDF(dish: currentDish, store: store) {
+                                pdfURL = url; showShareSheet = true
+                            }
+                        }
+                        DishActionCell(icon: "printer",       label: "Печать",       color: .gray)  { printTechCard() }
+                        DishActionCell(icon: "doc.on.doc",    label: "Дублировать",  color: .purple) {
+                            var copy = currentDish; copy.id = UUID()
+                            copy.name = currentDish.name + " (копия)"; copy.photoFilename = nil
+                            store.dishes.append(copy)
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        }
+                        if !currentDish.steps.isEmpty {
+                            DishActionCell(icon: "play.circle.fill", label: "Режим готовки", color: .green) { showCookingMode = true }
+                        }
+                        DishActionCell(icon: "clock.arrow.circlepath", label: "Версии", color: .indigo) { showVersions = true }
+                        DishActionCell(icon: "qrcode",        label: "QR-код",       color: .primary) { showQRCode = true }
+                    }
 
-                BigActionButton(title: "Дублировать техкарту", icon: "doc.on.doc") {
-                    var copy = currentDish
-                    copy.id = UUID()
-                    copy.name = currentDish.name + " (копия)"
-                    copy.photoFilename = nil
-                    store.dishes.append(copy)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    // ── Delete ────────────────────────────────────
+                    Button(role: .destructive) {
+                        showDeleteAlert = true
+                    } label: {
+                        Label("Удалить техкарту", systemImage: "trash")
+                            .font(.subheadline.bold())
+                            .frame(maxWidth: .infinity).frame(height: 48)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .padding(.top, 4)
                 }
-
-                BigActionButton(title: "Редактировать техкарту", icon: "pencil") {
-                    showEdit = true
-                }
-
-                BigActionButton(title: "История версий", icon: "clock.arrow.circlepath") {
-                    showVersions = true
-                }
-
-                BigActionButton(title: "QR-код техкарты", icon: "qrcode") {
-                    showQRCode = true
-                }
-
-                Button(role: .destructive) {
-                    showDeleteAlert = true
-                } label: {
-                    Label("Удалить техкарту", systemImage: "trash")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .padding(16)
             }
-            .padding()
         }
-        .background(Color.chefBackground)
-        .navigationTitle("Техкарта")
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(currentDish.name)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Button {
                 store.toggleFavorite(currentDish)
@@ -684,6 +597,189 @@ struct DishDetailView: View {
         } message: {
             Text("Блюдо будет удалено из техкарт.")
         }
+    }
+
+    // MARK: - Hero header
+
+    private var dishHero: some View {
+        ZStack(alignment: .bottomLeading) {
+            if let img = store.loadDishPhoto(for: currentDish) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
+                    .clipped()
+            } else {
+                LinearGradient(
+                    colors: [Color.chefAccent.opacity(0.7), Color.chefAccent.opacity(0.3)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 160)
+                .overlay(
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 52))
+                        .foregroundStyle(.white.opacity(0.4))
+                )
+            }
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .center, endPoint: .bottom
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                Text(currentDish.name)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                if currentDish.portionWeight > 0 {
+                    Text("\(currentDish.portionWeight, specifier: "%.0f") \(currentDish.portionWeightUnit)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+            }
+            .padding(16)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 0))
+    }
+
+    // MARK: - Stat chips
+
+    private var statChips: some View {
+        let cost    = store.calculateDishCost(currentDish)
+        let fcPct   = store.foodCostPercent(currentDish)
+        let fcColor: Color = fcPct > store.foodCostThreshold ? .red
+                           : fcPct > store.foodCostThreshold * 0.85 ? .orange : .chefAccent
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                statChip(icon: "cart.fill",  label: "Себест.", value: String(format: "%.2f", cost), color: .blue)
+                if currentDish.salePrice > 0 {
+                    statChip(icon: "percent",    label: "FC",      value: String(format: "%.0f%%", fcPct), color: fcColor)
+                    statChip(icon: "tag.fill",   label: "Цена",    value: String(format: "%.2f", currentDish.salePrice), color: .green)
+                }
+                if currentDish.cookTime > 0 {
+                    statChip(icon: "timer",      label: "Время",   value: "\(currentDish.cookTime) мин", color: .orange)
+                }
+                if currentDish.ingredients.count > 0 {
+                    statChip(icon: "list.bullet", label: "Ингр.",  value: "\(currentDish.ingredients.count)", color: .purple)
+                }
+            }
+        }
+    }
+
+    private func statChip(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.caption2).foregroundStyle(color)
+                Text(value).font(.subheadline.bold()).foregroundStyle(.primary)
+            }
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Status tags
+
+    private var statusTags: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Menu status
+                Label(currentDish.menuStatus.rawValue, systemImage: currentDish.menuStatus.icon)
+                    .font(.caption.bold())
+                    .foregroundStyle(currentDish.menuStatus.color)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(currentDish.menuStatus.color.opacity(0.12))
+                    .clipShape(Capsule())
+
+                // Dish type
+                Label(currentDish.dishType.rawValue, systemImage: currentDish.dishType.icon)
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color(.systemGray5))
+                    .clipShape(Capsule())
+
+                // Stop / Go
+                if currentDish.isStopListed {
+                    Text("СТОП").font(.caption.bold())
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                if currentDish.isGoListed {
+                    Text("ГОУ").font(.caption.bold())
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                // Allergens
+                ForEach(currentDish.allergens, id: \.self) { a in
+                    Text(a).font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(Color.orange.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    // MARK: - Section header
+
+    private func dishSectionHeader(_ title: String, count: Int?) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(.primary)
+            if let count {
+                Text("\(count)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.chefAccent)
+                    .clipShape(Capsule())
+            }
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+}
+
+// MARK: - Dish Action Cell
+
+private struct DishActionCell: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(color.opacity(0.15))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(color)
+                }
+                Text(label)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
     }
 }
 

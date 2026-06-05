@@ -73,65 +73,102 @@ final class VoiceInputController: ObservableObject {
 struct WriteOffsView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showAddWriteOff = false
+    @State private var searchText = ""
+
+    private let reasonColors: [String: Color] = [
+        "Порча": .red, "Истек срок": .orange,
+        "Ошибка приготовления": .yellow, "Брак": .purple, "Другое": .gray
+    ]
+
+    private var filtered: [WriteOff] {
+        let all = store.writeOffs.reversed() as [WriteOff]
+        guard !searchText.isEmpty else { return all }
+        return all.filter {
+            $0.productName.localizedCaseInsensitiveContains(searchText) ||
+            $0.reason.localizedCaseInsensitiveContains(searchText) ||
+            $0.employee.localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     var body: some View {
         Group {
             if store.writeOffs.isEmpty {
-                ScrollView {
-                    EmptyStateView(icon: "trash", title: "Списаний пока нет", subtitle: "Добавь первое списание продукта.")
-                        .padding(.vertical)
-                }
+                EmptyStateView(
+                    icon: "trash.fill", title: "Списаний пока нет",
+                    subtitle: "Добавьте первое списание продукта",
+                    actionTitle: "Добавить", action: { showAddWriteOff = true }
+                )
             } else {
                 List {
-                    ForEach(store.writeOffs.reversed()) { item in
-                        BigCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text(item.productName).font(.title3).bold()
-                                    Spacer()
-                                    Text(item.date.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text("Причина: \(item.reason)")
-                                    .foregroundStyle(.secondary)
-                                HStack {
-                                    Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(item.employee)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                    ForEach(filtered) { item in
+                        writeOffRow(item)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    store.writeOffs.removeAll { $0.id == item.id }
+                                } label: { Label("Удалить", systemImage: "trash") }
                             }
-                        }
-                        .padding(.horizontal)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                store.writeOffs.removeAll { $0.id == item.id }
-                            } label: { Label("Удалить", systemImage: "trash") }
-                        }
                     }
                 }
                 .listStyle(.plain)
-                .background(Color.chefBackground)
+                .background(Color(.systemGroupedBackground))
+                .searchable(text: $searchText, prompt: "Продукт, причина, сотрудник")
             }
         }
-        .background(Color.chefBackground)
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Списания")
         .toolbar {
             Button { showAddWriteOff = true } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
+                Image(systemName: "plus.circle.fill").font(.title2)
             }
         }
         .sheet(isPresented: $showAddWriteOff) {
             AddWriteOffView { store.addWriteOff($0) }
                 .environmentObject(store)
         }
+    }
+
+    private func writeOffRow(_ item: WriteOff) -> some View {
+        let color = reasonColors[item.reason] ?? .gray
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(color)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.productName)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(item.reason)
+                        .font(.caption)
+                        .foregroundStyle(color)
+                    Text("·").font(.caption).foregroundStyle(.secondary)
+                    Text(item.employee)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
+                    .font(.subheadline.bold())
+                Text(item.date.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .contentShape(Rectangle())
     }
 }
 

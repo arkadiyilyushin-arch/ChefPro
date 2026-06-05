@@ -3,6 +3,7 @@ import UserNotifications
 import CoreSpotlight
 import WidgetKit
 import FirebaseCrashlytics
+import FirebaseFirestore
 
 // MARK: - Undo Support
 
@@ -137,42 +138,54 @@ final class ChefProStore: ObservableObject {
             try? await ChefProFirebaseService.shared.registerAsMember()
             await syncFromCloud()
         }
-        startRemoteChangeListener()
-        startEmployeeSync()
-        startKitchenOrdersSync()
+        startAllRealtimeListeners()
     }
 
-    // MARK: - Real-time remote change listener
-    private func startRemoteChangeListener() {
-        Task { @MainActor in
-            ChefProFirebaseService.shared.startListening {
-                await self.syncFromCloud()
-            }
-        }
-    }
+    // MARK: - Real-time per-collection listeners (all collections)
 
-    // MARK: - Real-time kitchen orders listener (instant, no debounce)
-    private func startKitchenOrdersSync() {
-        Task { @MainActor in
-            ChefProFirebaseService.shared.startKitchenOrdersListener { [weak self] orders in
-                guard let self else { return }
+    private var collectionListeners: [ListenerRegistration] = []
+
+    private func startAllRealtimeListeners() {
+        collectionListeners.forEach { $0.remove() }
+        collectionListeners.removeAll()
+
+        let svc = ChefProFirebaseService.shared
+
+        func add<T: Codable>(_ name: String, setter: @escaping (ChefProStore, [T]) -> Void) {
+            let reg = svc.startCollectionListener(name) { [weak self] (items: [T]) in
+                guard let self, !self.isSyncing else { return }
                 self.isSyncingFromCloud = true
-                self.kitchenOrders = orders
+                setter(self, items)
                 self.isSyncingFromCloud = false
             }
+            self.collectionListeners.append(reg)
         }
-    }
 
-    // MARK: - Real-time employee sync
-    private func startEmployeeSync() {
-        Task { @MainActor in
-            ChefProFirebaseService.shared.startEmployeeListener { [weak self] updated in
-                guard let self else { return }
+        add("dishes")              { $0.dishes = $1 }
+        add("inventory")           { $0.inventoryItems = $1 }
+        add("employees")           { $0.employees = $1 }
+        add("kitchenOrders")       { $0.kitchenOrders = $1 }
+        add("closedKitchenOrders") { $0.closedKitchenOrders = $1 }
+        add("reservations")        { $0.reservations = $1 }
+        add("sales")               { $0.sales = $1 }
+        add("operatingExpenses")   { $0.operatingExpenses = $1 }
+        add("suppliers")           { $0.suppliers = $1 }
+        add("deliveries")          { $0.deliveries = $1 }
+        add("writeOffs")           { $0.writeOffs = $1 }
+        add("productions")         { $0.productions = $1 }
+        add("shiftHistory")        { $0.shiftHistory = $1 }
+        add("auditRecords")        { $0.auditRecords = $1 }
+
+        // Root doc для currentShift и restaurantName (только с других устройств)
+        collectionListeners.append(
+            svc.startRootDocListener { [weak self] shift, name in
+                guard let self, !self.isSyncing else { return }
                 self.isSyncingFromCloud = true
-                self.employees = updated
+                if let shift { self.currentShift = shift }
+                if let name, !name.isEmpty { self.restaurantName = name }
                 self.isSyncingFromCloud = false
             }
-        }
+        )
     }
 
     /// Call when app returns to foreground (from ScenePhase observer in App)
@@ -186,7 +199,7 @@ final class ChefProStore: ObservableObject {
             ChefProFirebaseService.shared.setRestaurantID(restaurantID)
         }
         await syncFromCloud()
-        startRemoteChangeListener()
+        startAllRealtimeListeners()
     }
 
     private func startNetworkMonitoring() {

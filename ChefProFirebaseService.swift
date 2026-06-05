@@ -35,34 +35,45 @@ final class ChefProFirebaseService: ObservableObject {
         String(restaurantID.replacingOccurrences(of: "-", with: "").prefix(8).uppercased())
     }
 
-    // ── Real-time listener ─────────────────────────────────────────────────
-    private var changeListener: ListenerRegistration?
-
-    /// Starts Firestore snapshot listener. Calls `onRemoteChange` only when
-    /// the update originated on ANOTHER device (compares lastUpdatedByDevice).
-    func startListening(onRemoteChange: @escaping () async -> Void) {
-        stopListening()
-        let root = db.collection("restaurants").document(restaurantID)
-        changeListener = root.addSnapshotListener { [weak self] snapshot, _ in
-            guard let self,
-                  let data = snapshot?.data(),
-                  let updatedBy = data["lastUpdatedByDevice"] as? String,
-                  updatedBy != self.deviceID,
-                  snapshot?.metadata.isFromCache == false      // came from server
-            else { return }
-            Task { await onRemoteChange() }
+    // ── Generic real-time collection listener ─────────────────────────────
+    /// Subscribes to a Firestore sub-collection and calls `onUpdate` with the
+    /// decoded array whenever the server pushes a change.
+    func startCollectionListener<T: Codable>(
+        _ collectionName: String,
+        onUpdate: @escaping ([T]) -> Void
+    ) -> ListenerRegistration {
+        let col = db.collection("restaurants").document(restaurantID).collection(collectionName)
+        return col.addSnapshotListener { snapshot, error in
+            guard let snapshot, error == nil,
+                  snapshot.metadata.isFromCache == false else { return }
+            let items = snapshot.documents.compactMap { try? $0.data(as: T.self) }
+            DispatchQueue.main.async { onUpdate(items) }
         }
     }
 
-    func stopListening() {
-        changeListener?.remove()
-        changeListener = nil
+    // ── Root doc listener (currentShift + restaurantName from other devices) ─
+    func startRootDocListener(
+        onUpdate: @escaping (Shift?, String?) -> Void
+    ) -> ListenerRegistration {
+        let root = db.collection("restaurants").document(restaurantID)
+        return root.addSnapshotListener { [weak self] snapshot, _ in
+            guard let self,
+                  let data = snapshot?.data(),
+                  snapshot?.metadata.isFromCache == false,
+                  let updatedBy = data["lastUpdatedByDevice"] as? String,
+                  updatedBy != self.deviceID
+            else { return }
+            let name = data["restaurantName"] as? String
+            let shift: Shift? = {
+                guard let raw = data["currentShift"] else { return nil }
+                return try? Firestore.Decoder().decode(Shift.self, from: raw)
+            }()
+            DispatchQueue.main.async { onUpdate(shift, name) }
+        }
     }
 
     // ── Change restaurant ID (join another device) ─────────────────────────
-    /// Switches this device to sync against the given restaurantID.
     func setRestaurantID(_ id: String) {
-        stopListening()
         UserDefaults.standard.set(id, forKey: restaurantIDKey)
     }
 
@@ -86,25 +97,6 @@ final class ChefProFirebaseService: ObservableObject {
         try await memberRef.setData(["uid": uid, "deviceID": deviceID], merge: true)
     }
 
-    // ── Real-time employee listener ───────────────────────────────────────
-    private var employeeListener: ListenerRegistration?
-
-    /// Starts a real-time listener on the employees sub-collection.
-    /// `onUpdate` is called with the fresh list whenever Firestore changes.
-    func startEmployeeListener(onUpdate: @escaping ([Employee]) -> Void) {
-        stopEmployeeListener()
-        let col = db.collection("restaurants").document(restaurantID).collection("employees")
-        employeeListener = col.addSnapshotListener { snapshot, error in
-            guard let snapshot, error == nil else { return }
-            let employees = snapshot.documents.compactMap { try? $0.data(as: Employee.self) }
-            DispatchQueue.main.async { onUpdate(employees) }
-        }
-    }
-
-    func stopEmployeeListener() {
-        employeeListener?.remove()
-        employeeListener = nil
-    }
 
     // ── Upload ────────────────────────────────────────────────────────────
     func uploadAll(
@@ -185,24 +177,6 @@ final class ChefProFirebaseService: ObservableObject {
         try col.document(order.id.uuidString).setData(from: order)
     }
 
-    // ── Real-time kitchen orders listener ─────────────────────────────────
-    private var kitchenOrdersListener: ListenerRegistration?
-
-    func startKitchenOrdersListener(onUpdate: @escaping ([KitchenOrder]) -> Void) {
-        kitchenOrdersListener?.remove()
-        let col = db.collection("restaurants").document(restaurantID).collection("kitchenOrders")
-        kitchenOrdersListener = col.addSnapshotListener { snapshot, error in
-            guard let snapshot, error == nil,
-                  snapshot.metadata.isFromCache == false else { return }
-            let orders = snapshot.documents.compactMap { try? $0.data(as: KitchenOrder.self) }
-            DispatchQueue.main.async { onUpdate(orders) }
-        }
-    }
-
-    func stopKitchenOrdersListener() {
-        kitchenOrdersListener?.remove()
-        kitchenOrdersListener = nil
-    }
 
     // ── Download ──────────────────────────────────────────────────────────
     func downloadAll() async throws -> ChefProCloudData {

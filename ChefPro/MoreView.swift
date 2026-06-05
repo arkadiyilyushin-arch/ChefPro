@@ -130,6 +130,7 @@ private struct MoreProfileCard: View {
             .padding(16)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -223,6 +224,7 @@ private struct QuickTile<Destination: View>: View {
             .padding(.vertical, 14)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -252,6 +254,7 @@ private struct MoreSectionBlock<Content: View>: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -311,6 +314,7 @@ private struct MoreRow<Destination: View>: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
 

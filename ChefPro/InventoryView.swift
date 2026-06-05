@@ -453,6 +453,7 @@ struct InventoryDetailView: View {
                             .padding(.horizontal, 12).padding(.vertical, 11)
                             .background(Color(.secondarySystemGroupedBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }

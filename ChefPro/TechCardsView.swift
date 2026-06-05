@@ -784,6 +784,7 @@ private struct DishActionCell: View {
             .padding(.horizontal, 12).padding(.vertical, 11)
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -1663,6 +1664,7 @@ struct DishGalleryView: View {
                                     .foregroundStyle(.white)
                                     .padding(6)
                             }
+                            .contentShape(Rectangle())
                         }
                     }
                 }

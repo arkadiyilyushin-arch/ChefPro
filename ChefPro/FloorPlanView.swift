@@ -48,9 +48,7 @@ struct FloorPlanView: View {
     @State private var showReservations = false
 
     // Drag state: stores translation-from-start while finger is down
-    @State private var dragOffsets:  [UUID: CGSize]  = [:]
-    // Drag start: stores the normalized (0–1) position when drag began
-    @State private var dragStarts:   [UUID: CGPoint] = [:]
+    @State private var dragOffsets: [UUID: CGSize] = [:]
 
     private var confirmedToday: Set<String> {
         Set(store.todayReservations
@@ -61,12 +59,9 @@ struct FloorPlanView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let canvas = CGSize(
-                    width:  geo.size.width,
-                    height: geo.size.height
-                )
+                let canvas = CGSize(width: geo.size.width, height: geo.size.height)
                 ZStack(alignment: .topLeading) {
-                    // Background tap to deselect
+                    // Background
                     Color(.systemGroupedBackground)
                         .ignoresSafeArea()
                         .onTapGesture { selectedID = nil }
@@ -82,18 +77,16 @@ struct FloorPlanView: View {
                     // Legend
                     legend
                 }
+                // Named coordinate space so drag gestures report positions relative to this canvas
+                .coordinateSpace(name: "floorCanvas")
             }
             .navigationTitle("План зала")
             .navigationBarTitleDisplayMode(.large)
             .toolbar { toolbarContent }
             .sheet(isPresented: $showAddTable) {
                 AddFloorTableView { newTable in
-                    // Place new table at a non-overlapping spot
-                    var t = newTable
-                    t.x = 0.1
-                    t.y = 0.1
-                    tables.append(t)
-                    saveTables()
+                    var t = newTable; t.x = 0.1; t.y = 0.1
+                    tables.append(t); saveTables()
                 }
             }
             .sheet(isPresented: $showReservations) {
@@ -107,15 +100,13 @@ struct FloorPlanView: View {
 
     @ViewBuilder
     private func tableCell(_ table: FloorTable, canvas: CGSize) -> some View {
-        let sz        = TableLayout.size(for: table.shape)
-        let isBooked  = confirmedToday.contains(table.number)
-        let isSel     = selectedID == table.id
-
-        // Current center in pixels = stored position + live drag offset
-        let base      = pixelCenter(table, canvas: canvas, sz: sz)
-        let offset    = dragOffsets[table.id] ?? .zero
-        let cx        = base.x + offset.width
-        let cy        = base.y + offset.height
+        let sz       = TableLayout.size(for: table.shape)
+        let isBooked = confirmedToday.contains(table.number)
+        let isSel    = selectedID == table.id
+        let base     = pixelCenter(table, canvas: canvas, sz: sz)
+        let offset   = dragOffsets[table.id] ?? .zero
+        let cx       = base.x + offset.width
+        let cy       = base.y + offset.height
 
         ZStack {
             tableShape(table, sz: sz, booked: isBooked, selected: isSel)
@@ -123,9 +114,11 @@ struct FloorPlanView: View {
         }
         .frame(width: sz.width, height: sz.height)
         .position(x: cx, y: cy)
-        .shadow(color: isSel ? .blue.opacity(0.5) : .clear, radius: 8)
-        .animation(.interactiveSpring(), value: dragOffsets[table.id])
-        .gesture(dragGesture(for: table, canvas: canvas, sz: sz))
+        .shadow(color: isSel ? .blue.opacity(0.4) : .black.opacity(0.08), radius: isSel ? 8 : 3, y: 2)
+        // Use high-priority drag so it wins over scroll/tap in edit mode
+        .highPriorityGesture(
+            editMode ? dragGesture(for: table, canvas: canvas, sz: sz) : nil
+        )
         .onTapGesture {
             withAnimation(.spring(response: 0.25)) {
                 selectedID = selectedID == table.id ? nil : table.id
@@ -134,65 +127,44 @@ struct FloorPlanView: View {
         .contextMenu {
             if editMode {
                 Button(role: .destructive) {
-                    tables.removeAll { $0.id == table.id }
-                    saveTables()
+                    tables.removeAll { $0.id == table.id }; saveTables()
                 } label: {
                     Label("Удалить стол", systemImage: "trash")
                 }
             }
-            Button {
-                showReservations = true
-            } label: {
+            Button { showReservations = true } label: {
                 Label("Забронировать", systemImage: "calendar.badge.plus")
             }
         }
     }
 
-    // MARK: - Drag gesture (translation-based — correct for .position views)
+    // MARK: - Drag gesture
 
-    private func dragGesture(
-        for table: FloorTable,
-        canvas: CGSize,
-        sz: CGSize
-    ) -> some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .local)
+    private func dragGesture(for table: FloorTable, canvas: CGSize, sz: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named("floorCanvas"))
             .onChanged { val in
-                guard editMode else { return }
-                // Store start on first movement
-                if dragStarts[table.id] == nil {
-                    dragStarts[table.id] = CGPoint(x: table.x, y: table.y)
-                }
                 dragOffsets[table.id] = val.translation
             }
             .onEnded { val in
-                guard editMode,
-                      let start = dragStarts[table.id],
-                      let i     = tables.firstIndex(where: { $0.id == table.id })
-                else { return }
+                guard let i = tables.firstIndex(where: { $0.id == table.id }) else {
+                    dragOffsets[table.id] = nil; return
+                }
+                let availW = max(1, canvas.width  - sz.width)
+                let availH = max(1, canvas.height - sz.height)
+                let base   = pixelCenter(table, canvas: canvas, sz: sz)
 
-                // Available range for the center point
-                let availW = canvas.width  - sz.width
-                let availH = canvas.height - sz.height
-
-                guard availW > 0, availH > 0 else { return }
-
-                // New center in pixels (from start normalized coords)
-                var newCX = start.x * availW + sz.width  / 2 + val.translation.width
-                var newCY = start.y * availH + sz.height / 2 + val.translation.height
-
+                var newCX = base.x + val.translation.width
+                var newCY = base.y + val.translation.height
                 // Snap to grid
                 newCX = round(newCX / TableLayout.gridStep) * TableLayout.gridStep
                 newCY = round(newCY / TableLayout.gridStep) * TableLayout.gridStep
+                // Clamp to canvas
+                newCX = max(sz.width / 2, min(canvas.width  - sz.width  / 2, newCX))
+                newCY = max(sz.height / 2, min(canvas.height - sz.height / 2, newCY))
 
-                // Convert back to 0–1 (clamped)
-                let newX = max(0, min(1, (newCX - sz.width  / 2) / availW))
-                let newY = max(0, min(1, (newCY - sz.height / 2) / availH))
-
-                tables[i].x = newX
-                tables[i].y = newY
-
+                tables[i].x = (newCX - sz.width  / 2) / availW
+                tables[i].y = (newCY - sz.height / 2) / availH
                 dragOffsets[table.id] = nil
-                dragStarts [table.id] = nil
                 saveTables()
             }
     }

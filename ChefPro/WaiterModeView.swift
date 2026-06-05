@@ -472,43 +472,59 @@ struct WaiterOrderSheet: View {
                         // ── Dish list ──────────────────────────
                         ForEach(filteredDishes) { dish in
                             Button {
+                                guard !dish.isStopListed else { return }
                                 withAnimation { selectedDish = selectedDish?.id == dish.id ? nil : dish }
                                 portions = 1
                             } label: {
                                 HStack(spacing: 12) {
                                     ZStack {
                                         RoundedRectangle(cornerRadius: 8)
-                                            .fill(selectedDish?.id == dish.id ? Color.chefAccent.opacity(0.15) : Color(.tertiarySystemFill))
+                                            .fill(dish.isStopListed
+                                                  ? Color.red.opacity(0.1)
+                                                  : selectedDish?.id == dish.id
+                                                    ? Color.chefAccent.opacity(0.15)
+                                                    : Color(.tertiarySystemFill))
                                             .frame(width: 36, height: 36)
-                                        Image(systemName: "fork.knife")
+                                        Image(systemName: dish.isStopListed ? "xmark" : "fork.knife")
                                             .font(.system(size: 14))
-                                            .foregroundStyle(selectedDish?.id == dish.id ? .chefAccent : .secondary)
+                                            .foregroundStyle(dish.isStopListed ? .red : selectedDish?.id == dish.id ? .chefAccent : .secondary)
                                     }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(dish.name)
                                             .font(.subheadline.bold())
-                                            .foregroundStyle(.primary)
+                                            .foregroundStyle(dish.isStopListed ? .secondary : .primary)
                                             .lineLimit(1)
                                         Text(dish.category)
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    if dish.salePrice > 0 {
-                                        Text("\(Int(dish.salePrice)) ₽")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    if selectedDish?.id == dish.id {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.chefAccent)
+                                    if dish.isStopListed {
+                                        Text("СТОП")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 8).padding(.vertical, 3)
+                                            .background(Color.red)
+                                            .clipShape(Capsule())
+                                    } else {
+                                        if dish.salePrice > 0 {
+                                            Text("\(Int(dish.salePrice)) ₽")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if selectedDish?.id == dish.id {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.chefAccent)
+                                        }
                                     }
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
+                                .opacity(dish.isStopListed ? 0.55 : 1)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .disabled(dish.isStopListed)
 
                             if dish.id != filteredDishes.last?.id {
                                 Divider().padding(.leading, 64)

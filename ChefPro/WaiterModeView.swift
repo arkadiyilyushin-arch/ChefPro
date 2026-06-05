@@ -343,6 +343,16 @@ private struct CountPickerSheet: View {
     }
 }
 
+// MARK: - Элемент корзины
+
+private struct CartItem: Identifiable {
+    let id   = UUID()
+    var dish:     Dish
+    var portions: Int
+    var course:   Int
+    var note:     String
+}
+
 // MARK: - Order Sheet
 
 struct WaiterOrderSheet: View {
@@ -352,12 +362,13 @@ struct WaiterOrderSheet: View {
     let tableNumber: String
     let seats:       Int
 
+    @State private var cart:         [CartItem] = []
     @State private var selectedDish: Dish?  = nil
     @State private var portions             = 1
     @State private var course               = 1
     @State private var note                 = ""
     @State private var searchText           = ""
-    @State private var sentOrders: [KitchenOrder] = []
+    @State private var showCart             = true
     @FocusState private var searchFocused: Bool
 
     private var existingOrders: [KitchenOrder] {
@@ -370,179 +381,59 @@ struct WaiterOrderSheet: View {
             .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
+    private var cartTotal: Double {
+        cart.reduce(0) { sum, item in
+            sum + (item.dish.salePrice * Double(item.portions))
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // ── Table header ───────────────────────────────
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.chefAccent.opacity(0.15))
-                            .frame(width: 44, height: 44)
-                        Image(systemName: "fork.knife.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.chefAccent)
-                    }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Стол \(tableNumber)")
-                            .font(.headline.bold())
-                        if seats > 0 {
-                            Text("\(seats) мест")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+
+                    // ── Шапка стола ───────────────────────────
+                    tableHeader
+
+                    // ── На кухне (уже отправленные) ───────────
                     if !existingOrders.isEmpty {
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text("\(existingOrders.count) позиций")
-                                .font(.caption.bold())
-                                .foregroundStyle(.orange)
-                            Text("на кухне")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
+                        kitchenOrdersStrip
                     }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(.secondarySystemGroupedBackground))
 
-                Divider()
-
-                // ── Existing kitchen orders ────────────────────
-                if !existingOrders.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(existingOrders) { order in
-                                existingOrderChip(order)
-                            }
-                        }
-                        .padding(.horizontal, 16)
+                    // ── Корзина ───────────────────────────────
+                    if !cart.isEmpty {
+                        cartSection
                     }
-                    .padding(.vertical, 8)
-                    .background(Color(.systemGroupedBackground))
-                    Divider()
-                }
 
-                // ── Sent this session ──────────────────────────
-                if !sentOrders.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(sentOrders) { order in
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                    Text(order.dishName)
-                                    Text("×\(order.portions)").foregroundStyle(.secondary)
+                    // ── Поиск ─────────────────────────────────
+                    searchBar
+
+                    // ── Список блюд ───────────────────────────
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(filteredDishes) { dish in
+                                dishRow(dish)
+                                if dish.id != filteredDishes.last?.id {
+                                    Divider().padding(.leading, 64)
                                 }
-                                .font(.caption)
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(Color.green.opacity(0.1))
-                                .clipShape(Capsule())
+                            }
+                            if let dish = selectedDish {
+                                addToCartPanel(dish)
                             }
                         }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                         .padding(.horizontal, 16)
-                    }
-                    .padding(.vertical, 6)
-                    Divider()
-                }
-
-                // ── Search bar ─────────────────────────────────
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                    TextField("Поиск блюда…", text: $searchText)
-                        .focused($searchFocused)
-                    if !searchText.isEmpty {
-                        Button { searchText = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                        .padding(.bottom, cart.isEmpty ? 20 : 88)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .background(Color(.systemGroupedBackground))
 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        // ── Dish list ──────────────────────────
-                        ForEach(filteredDishes) { dish in
-                            Button {
-                                guard !dish.isStopListed else { return }
-                                withAnimation { selectedDish = selectedDish?.id == dish.id ? nil : dish }
-                                portions = 1
-                            } label: {
-                                HStack(spacing: 12) {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(dish.isStopListed
-                                                  ? Color.red.opacity(0.1)
-                                                  : selectedDish?.id == dish.id
-                                                    ? Color.chefAccent.opacity(0.15)
-                                                    : Color(.tertiarySystemFill))
-                                            .frame(width: 36, height: 36)
-                                        Image(systemName: dish.isStopListed ? "xmark" : "fork.knife")
-                                            .font(.system(size: 14))
-                                            .foregroundStyle(dish.isStopListed ? .red : selectedDish?.id == dish.id ? .chefAccent : .secondary)
-                                    }
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(dish.name)
-                                            .font(.subheadline.bold())
-                                            .foregroundStyle(dish.isStopListed ? .secondary : .primary)
-                                            .lineLimit(1)
-                                        Text(dish.category)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if dish.isStopListed {
-                                        Text("СТОП")
-                                            .font(.caption2.bold())
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 8).padding(.vertical, 3)
-                                            .background(Color.red)
-                                            .clipShape(Capsule())
-                                    } else {
-                                        if dish.salePrice > 0 {
-                                            Text("\(Int(dish.salePrice)) ₽")
-                                                .font(.caption.bold())
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        if selectedDish?.id == dish.id {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.chefAccent)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .opacity(dish.isStopListed ? 0.55 : 1)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(dish.isStopListed)
-
-                            if dish.id != filteredDishes.last?.id {
-                                Divider().padding(.leading, 64)
-                            }
-                        }
-
-                        // ── Order config panel ─────────────────
-                        if let dish = selectedDish {
-                            orderConfigPanel(dish)
-                        }
-                    }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 20)
+                // ── Плавающая кнопка отправки ─────────────────
+                if !cart.isEmpty {
+                    sendCartButton
                 }
             }
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("Стол \(tableNumber)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -553,48 +444,276 @@ struct WaiterOrderSheet: View {
         }
     }
 
-    // MARK: - Order config panel
+    // MARK: - Шапка стола
 
-    private func orderConfigPanel(_ dish: Dish) -> some View {
+    private var tableHeader: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Color.chefAccent.opacity(0.15)).frame(width: 44, height: 44)
+                Image(systemName: "fork.knife.circle.fill")
+                    .font(.system(size: 22)).foregroundStyle(.chefAccent)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Стол \(tableNumber)").font(.headline.bold())
+                if seats > 0 {
+                    Text("\(seats) мест").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if !existingOrders.isEmpty {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("\(existingOrders.count) позиций")
+                        .font(.caption.bold()).foregroundStyle(.orange)
+                    Text("на кухне").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Color(.secondarySystemGroupedBackground))
+        .overlay(Divider(), alignment: .bottom)
+    }
+
+    // ── Полоса уже отправленных заказов с кнопкой отмены ──────
+
+    private var kitchenOrdersStrip: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(existingOrders) { order in
+                        HStack(spacing: 5) {
+                            Circle().fill(order.status.color).frame(width: 7, height: 7)
+                            Text(order.dishName).lineLimit(1)
+                            Text("×\(order.portions)").foregroundStyle(.secondary)
+                            Text("·").foregroundStyle(.secondary)
+                            Text(order.status.rawValue).foregroundStyle(order.status.color)
+                            // Отмена только для новых (ещё не взяли в готовку)
+                            if order.status == .new {
+                                Button {
+                                    withAnimation {
+                                        store.deleteKitchenOrder(order)
+                                        Task { try? await ChefProFirebaseService.shared.deleteKitchenOrder(id: order.id) }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.red.opacity(0.7))
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(order.status.color.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 8)
+            .background(Color(.systemGroupedBackground))
+            Divider()
+        }
+    }
+
+    // ── Корзина ────────────────────────────────────────────────
+
+    private var cartSection: some View {
+        VStack(spacing: 0) {
+            // Заголовок корзины
+            Button {
+                withAnimation(.spring(response: 0.3)) { showCart.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "cart.fill")
+                        .font(.caption.bold()).foregroundStyle(.chefAccent)
+                    Text("Корзина")
+                        .font(.subheadline.bold())
+                    Text("\(cart.count)")
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.chefAccent.opacity(0.15))
+                        .foregroundStyle(.chefAccent)
+                        .clipShape(Capsule())
+                    Spacer()
+                    if cartTotal > 0 {
+                        Text("\(Int(cartTotal)) ₽")
+                            .font(.caption.bold()).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: showCart ? "chevron.up" : "chevron.down")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showCart {
+                VStack(spacing: 0) {
+                    ForEach(cart) { item in
+                        cartRow(item)
+                        if item.id != cart.last?.id {
+                            Divider().padding(.leading, 60)
+                        }
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            Divider()
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+    }
+
+    private func cartRow(_ item: CartItem) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.chefAccent.opacity(0.12))
+                    .frame(width: 34, height: 34)
+                Image(systemName: "fork.knife")
+                    .font(.system(size: 13)).foregroundStyle(.chefAccent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.dish.name).font(.subheadline.bold()).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(KitchenOrder.courseNames[item.course] ?? "").font(.caption2).foregroundStyle(.secondary)
+                    if !item.note.isEmpty {
+                        Text("· \(item.note)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            Spacer()
+            Text("×\(item.portions)")
+                .font(.subheadline.bold()).foregroundStyle(.chefAccent)
+            if item.dish.salePrice > 0 {
+                Text("\(Int(item.dish.salePrice * Double(item.portions))) ₽")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button {
+                withAnimation { cart.removeAll { $0.id == item.id } }
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red.opacity(0.7))
+                    .font(.subheadline).padding(8)
+            }
+            .buttonStyle(.plain).contentShape(Rectangle())
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+    }
+
+    // ── Поиск ─────────────────────────────────────────────────
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.subheadline)
+            TextField("Поиск блюда…", text: $searchText).focused($searchFocused)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    // ── Строка блюда ──────────────────────────────────────────
+
+    private func dishRow(_ dish: Dish) -> some View {
+        let isSelected = selectedDish?.id == dish.id
+        let inCart = cart.filter { $0.dish.id == dish.id }.reduce(0) { $0 + $1.portions }
+
+        return Button {
+            guard !dish.isStopListed else { return }
+            withAnimation { selectedDish = isSelected ? nil : dish }
+            portions = 1; note = ""
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(dish.isStopListed
+                              ? Color.red.opacity(0.1)
+                              : isSelected ? Color.chefAccent.opacity(0.15) : Color(.tertiarySystemFill))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: dish.isStopListed ? "xmark" : "fork.knife")
+                        .font(.system(size: 14))
+                        .foregroundStyle(dish.isStopListed ? .red : isSelected ? .chefAccent : .secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dish.name)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(dish.isStopListed ? .secondary : .primary)
+                        .lineLimit(1)
+                    Text(dish.category).font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if dish.isStopListed {
+                    Text("СТОП").font(.caption2.bold()).foregroundStyle(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.red).clipShape(Capsule())
+                } else {
+                    HStack(spacing: 6) {
+                        if inCart > 0 {
+                            Text("×\(inCart) в корзине")
+                                .font(.caption2.bold()).foregroundStyle(.chefAccent)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Color.chefAccent.opacity(0.1))
+                                .clipShape(Capsule())
+                        } else if dish.salePrice > 0 {
+                            Text("\(Int(dish.salePrice)) ₽")
+                                .font(.caption.bold()).foregroundStyle(.secondary)
+                        }
+                        if isSelected {
+                            Image(systemName: "chevron.up").font(.caption2).foregroundStyle(.chefAccent)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .opacity(dish.isStopListed ? 0.55 : 1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(dish.isStopListed)
+    }
+
+    // ── Панель добавления в корзину ────────────────────────────
+
+    private func addToCartPanel(_ dish: Dish) -> some View {
         VStack(spacing: 0) {
             Divider()
             VStack(spacing: 14) {
-                HStack(spacing: 0) {
-                    Text(dish.name)
-                        .font(.subheadline.bold())
-                        .lineLimit(1)
+                HStack {
+                    Text(dish.name).font(.subheadline.bold()).lineLimit(1)
                     Spacer()
                     Button { withAnimation { selectedDish = nil } } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
 
-                // Portions stepper
+                // Порции
                 HStack {
                     Text("Порций").font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                     HStack(spacing: 0) {
                         Button { if portions > 1 { portions -= 1 } } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.title3)
+                            Image(systemName: "minus.circle.fill").font(.title3)
                                 .foregroundStyle(portions > 1 ? .chefAccent : .secondary)
                         }
                         .buttonStyle(.plain)
-                        Text("\(portions)")
-                            .font(.headline.bold())
-                            .frame(width: 36)
+                        Text("\(portions)").font(.headline.bold()).frame(width: 36)
                         Button { if portions < 20 { portions += 1 } } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.chefAccent)
+                            Image(systemName: "plus.circle.fill").font(.title3).foregroundStyle(.chefAccent)
                         }
                         .buttonStyle(.plain)
                     }
                 }
 
-                // Course picker
+                // Курс
                 HStack {
                     Text("Курс подачи").font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
@@ -606,65 +725,86 @@ struct WaiterOrderSheet: View {
                     .labelsHidden()
                 }
 
-                // Note field
+                // Примечание
                 TextField("Комментарий (аллергии, пожелания…)", text: $note, axis: .vertical)
-                    .font(.subheadline)
-                    .lineLimit(2...3)
+                    .font(.subheadline).lineLimit(2...3)
                     .padding(10)
                     .background(Color(.tertiarySystemFill))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                // Send button
+                // Добавить в корзину
                 Button {
-                    sendOrder(dish: dish)
+                    withAnimation {
+                        cart.append(CartItem(dish: dish, portions: portions, course: course, note: note))
+                        selectedDish = nil
+                        portions = 1; course = 1; note = ""
+                        showCart = true
+                    }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 } label: {
-                    Label("Отправить на кухню", systemImage: "paperplane.fill")
+                    Label("Добавить в корзину", systemImage: "cart.badge.plus")
                         .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(Color.chefAccent)
-                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(Color.chefAccent.opacity(0.12))
+                        .foregroundStyle(.chefAccent)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.chefAccent.opacity(0.3), lineWidth: 1))
                 }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain).contentShape(Rectangle())
             }
             .padding(16)
             .background(Color(.tertiarySystemGroupedBackground))
         }
     }
 
-    private func existingOrderChip(_ order: KitchenOrder) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(order.status.color)
-                .frame(width: 7, height: 7)
-            Text(order.dishName).lineLimit(1)
-            Text("×\(order.portions)").foregroundStyle(.secondary)
-            Text("·").foregroundStyle(.secondary)
-            Text(order.status.rawValue)
-                .foregroundStyle(order.status.color)
+    // ── Кнопка отправки всей корзины ──────────────────────────
+
+    private var sendCartButton: some View {
+        Button {
+            sendCart()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "paperplane.fill")
+                Text("Отправить на кухню")
+                Spacer()
+                Text("\(cart.count) блюд")
+                    .font(.subheadline)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Color.white.opacity(0.2))
+                    .clipShape(Capsule())
+                if cartTotal > 0 {
+                    Text("\(Int(cartTotal)) ₽").font(.subheadline)
+                }
+            }
+            .font(.headline)
+            .padding(.horizontal, 20).padding(.vertical, 16)
+            .background(Color.chefAccent)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .shadow(color: Color.chefAccent.opacity(0.4), radius: 12, y: 4)
         }
-        .font(.caption)
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(order.status.color.opacity(0.1))
-        .clipShape(Capsule())
+        .buttonStyle(.plain).contentShape(Rectangle())
+        .padding(.horizontal, 16).padding(.bottom, 24)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    private func sendOrder(dish: Dish) {
-        let order = KitchenOrder(
-            dishName: dish.name,
-            portions: portions,
-            tableNumber: tableNumber,
-            note: note,
-            course: course,
-            status: .new,
-            createdAt: Date()
-        )
-        store.addKitchenOrder(order)
-        sentOrders.append(order)
+    // MARK: - Логика отправки
+
+    private func sendCart() {
+        for item in cart {
+            let order = KitchenOrder(
+                dishName:    item.dish.name,
+                portions:    item.portions,
+                tableNumber: tableNumber,
+                note:        item.note,
+                course:      item.course,
+                status:      .new,
+                createdAt:   Date()
+            )
+            store.addKitchenOrder(order)
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        cart.removeAll()
         selectedDish = nil
-        portions = 1
-        note = ""
     }
 }

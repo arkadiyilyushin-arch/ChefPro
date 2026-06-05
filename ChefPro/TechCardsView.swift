@@ -58,15 +58,28 @@ struct DishRowCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                // Cost · Price · Portion weight
                 HStack(spacing: 6) {
-                    Text(cost, format: .number.precision(.fractionLength(2)))
-                        .font(.caption.bold())
-                        .foregroundStyle(.primary)
-                    if dish.cookTime > 0 {
-                        Text("·")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Label("\(dish.cookTime) мин", systemImage: "timer")
-                            .font(.caption2).foregroundStyle(.secondary)
+                    // Себестоимость
+                    HStack(spacing: 2) {
+                        Image(systemName: "cart.fill").font(.system(size: 9)).foregroundStyle(.blue)
+                        Text(String(format: "%.2f", cost)).font(.caption.bold()).foregroundStyle(.primary)
+                    }
+                    if dish.salePrice > 0 {
+                        Text("·").font(.caption).foregroundStyle(.secondary)
+                        // Цена продажи
+                        HStack(spacing: 2) {
+                            Image(systemName: "tag.fill").font(.system(size: 9)).foregroundStyle(.green)
+                            Text(String(format: "%.2f", dish.salePrice)).font(.caption.bold()).foregroundStyle(.primary)
+                        }
+                    }
+                    if dish.portionWeight > 0 {
+                        Text("·").font(.caption).foregroundStyle(.secondary)
+                        // Выход
+                        HStack(spacing: 2) {
+                            Image(systemName: "scalemass.fill").font(.system(size: 9)).foregroundStyle(.orange)
+                            Text("\(dish.portionWeight, specifier: "%.0f") \(dish.portionWeightUnit)").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

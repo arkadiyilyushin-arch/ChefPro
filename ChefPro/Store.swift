@@ -145,6 +145,7 @@ final class ChefProStore: ObservableObject {
 
     private var collectionListeners: [ListenerRegistration] = []
 
+    @MainActor
     private func startAllRealtimeListeners() {
         collectionListeners.forEach { $0.remove() }
         collectionListeners.removeAll()
@@ -199,7 +200,7 @@ final class ChefProStore: ObservableObject {
             ChefProFirebaseService.shared.setRestaurantID(restaurantID)
         }
         await syncFromCloud()
-        startAllRealtimeListeners()
+        await MainActor.run { startAllRealtimeListeners() }
     }
 
     private func startNetworkMonitoring() {

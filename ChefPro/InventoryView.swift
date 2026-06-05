@@ -349,115 +349,130 @@ struct InventoryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                BigCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text(currentItem.name)
-                                .font(.largeTitle)
-                                .bold()
-                            Spacer()
-                            Image(systemName: currentItem.isLowStock ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                .font(.title)
-                                .foregroundStyle(currentItem.isLowStock ? .orange : .green)
-                        }
-
+            VStack(spacing: 14) {
+                // ── Hero header ──────────────────────────────────────
+                ZStack(alignment: .bottomLeading) {
+                    let statusColor: Color = currentItem.isLowStock ? .orange : .green
+                    LinearGradient(
+                        colors: [statusColor.opacity(0.7), statusColor.opacity(0.3)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                    .frame(maxWidth: .infinity).frame(height: 140)
+                    .overlay(
+                        Image(systemName: "shippingbox.fill")
+                            .font(.system(size: 48)).foregroundStyle(.white.opacity(0.25))
+                    )
+                    LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .center, endPoint: .bottom)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(currentItem.name)
+                            .font(.title2.bold()).foregroundStyle(.white).lineLimit(2)
                         Text(currentItem.category)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-
-                        HStack(alignment: .bottom) {
-                            Text("\(currentItem.quantity, specifier: "%.1f")")
-                                .font(.system(size: 48, weight: .bold))
-                            Text(currentItem.unit)
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-
-                        Text("Цена: \(currentItem.pricePerUnit, specifier: "%.2f") за \(currentItem.unit)")
-                            .font(.headline)
-                            .foregroundStyle(.chefAccent)
+                            .font(.caption).foregroundStyle(.white.opacity(0.8))
                     }
+                    .padding(16)
                 }
 
-                BigCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Минимальный остаток")
-                            .font(.headline)
-                        Text("\(currentItem.minQuantity, specifier: "%.1f") \(currentItem.unit)")
-                            .font(.title2)
-                            .bold()
-                        Text(currentItem.isLowStock ? "Нужно заказать" : "Остаток в норме")
-                            .foregroundStyle(currentItem.isLowStock ? .orange : .green)
+                // ── Stat chips ───────────────────────────────────────
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        inventoryChip(icon: "scalemass.fill", label: "Остаток",
+                                      value: String(format: "%.1f \(currentItem.unit)", currentItem.quantity),
+                                      color: currentItem.isLowStock ? .orange : .green)
+                        inventoryChip(icon: "tag.fill",        label: "Цена/\(currentItem.unit)",
+                                      value: String(format: "%.2f", currentItem.pricePerUnit),
+                                      color: .blue)
+                        inventoryChip(icon: "arrow.down.circle.fill", label: "Мин. остаток",
+                                      value: String(format: "%.1f \(currentItem.unit)", currentItem.minQuantity),
+                                      color: .secondary)
+                        let totalVal = currentItem.quantity * currentItem.pricePerUnit
+                        inventoryChip(icon: "creditcard.fill", label: "Стоимость",
+                                      value: String(format: "%.2f", totalVal),
+                                      color: .purple)
                     }
+                    .padding(.horizontal, 16)
                 }
 
-                // История цен
+                // ── Status banner ────────────────────────────────────
+                HStack(spacing: 8) {
+                    Image(systemName: currentItem.isLowStock ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(currentItem.isLowStock ? .orange : .green)
+                    Text(currentItem.isLowStock ? "На исходе — нужно заказать" : "Остаток в норме")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(currentItem.isLowStock ? .orange : .green)
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background((currentItem.isLowStock ? Color.orange : Color.green).opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 16)
+
+                // ── Price history chart ──────────────────────────────
                 if currentItem.priceHistory.count >= 2 {
-                    BigCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label("История цен", systemImage: "chart.line.uptrend.xyaxis")
-                                .font(.headline)
-                            Chart(currentItem.priceHistory) { point in
-                                LineMark(
-                                    x: .value("Дата",  point.date),
-                                    y: .value("Цена",  point.price)
-                                )
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("История цен", systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.subheadline.bold()).foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                        Chart(currentItem.priceHistory) { point in
+                            LineMark(x: .value("Дата", point.date), y: .value("Цена", point.price))
                                 .foregroundStyle(Color.chefAccent)
-                                PointMark(
-                                    x: .value("Дата",  point.date),
-                                    y: .value("Цена",  point.price)
-                                )
+                            PointMark(x: .value("Дата", point.date), y: .value("Цена", point.price))
                                 .foregroundStyle(Color.chefAccent)
-                            }
-                            .chartXAxis {
-                                AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                                    AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                                }
-                            }
-                            .chartYAxisLabel("/ \(currentItem.unit)")
-                            .frame(height: 120)
                         }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                            }
+                        }
+                        .chartYAxisLabel("/ \(currentItem.unit)")
+                        .frame(height: 110)
+                        .padding(.horizontal, 14).padding(.bottom, 12)
                     }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 16)
                 }
 
-                BigActionButton(title: "Списать", icon: "minus.circle.fill") {
-                    showQuickWriteOff = true
+                // ── Actions grid ─────────────────────────────────────
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Действия").font(.subheadline.bold()).foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        inventoryActionCell(icon: "minus.circle.fill", label: "Списать",     color: .orange) { showQuickWriteOff = true }
+                        inventoryActionCell(icon: "pencil",            label: "Редактировать", color: .blue)  { showEdit = true }
+                        NavigationLink {
+                            StockMovementsView(filterItemName: currentItem.name).environmentObject(store)
+                        } label: {
+                            HStack(spacing: 10) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8).fill(Color.teal.opacity(0.15)).frame(width: 34, height: 34)
+                                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 14, weight: .semibold)).foregroundStyle(.teal)
+                                }
+                                Text("История").font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 11)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
                 }
 
-                BigActionButton(title: "Редактировать продукт", icon: "pencil") {
-                    showEdit = true
-                }
-
-                NavigationLink {
-                    StockMovementsView(filterItemName: currentItem.name).environmentObject(store)
-                } label: {
-                    Label("История движений", systemImage: "clock.arrow.circlepath")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: 56)
-                        .padding(.horizontal, 18)
-                        .background(Color.chefCard)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                }
-                .buttonStyle(.plain)
-
-                Button(role: .destructive) {
-                    showDeleteAlert = true
-                } label: {
+                // ── Delete ───────────────────────────────────────────
+                Button(role: .destructive) { showDeleteAlert = true } label: {
                     Label("Удалить продукт", systemImage: "trash")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity).frame(height: 46)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.bordered).tint(.red)
+                .padding(.horizontal, 16).padding(.bottom, 8)
             }
-            .padding()
+            .padding(.vertical, 0)
         }
-        .background(Color.chefBackground)
-        .navigationTitle("Продукт")
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(currentItem.name)
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: itemStillExists) { _, exists in
             if !exists { dismiss() }
         }
@@ -478,6 +493,36 @@ struct InventoryDetailView: View {
         .sheet(isPresented: $showQuickWriteOff) {
             QuickWriteOffView(item: currentItem).environmentObject(store)
         }
+    }
+
+    private func inventoryChip(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.caption2).foregroundStyle(color)
+                Text(value).font(.subheadline.bold()).foregroundStyle(.primary)
+            }
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func inventoryActionCell(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.15)).frame(width: 34, height: 34)
+                    Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(color)
+                }
+                Text(label).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
     }
 }
 

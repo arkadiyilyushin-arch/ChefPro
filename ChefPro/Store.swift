@@ -153,11 +153,13 @@ final class ChefProStore: ObservableObject {
 
     // MARK: - Real-time kitchen orders listener (instant, no debounce)
     private func startKitchenOrdersSync() {
-        ChefProFirebaseService.shared.startKitchenOrdersListener { [weak self] orders in
-            guard let self else { return }
-            self.isSyncingFromCloud = true
-            self.kitchenOrders = orders
-            self.isSyncingFromCloud = false
+        Task { @MainActor in
+            ChefProFirebaseService.shared.startKitchenOrdersListener { [weak self] orders in
+                guard let self else { return }
+                self.isSyncingFromCloud = true
+                self.kitchenOrders = orders
+                self.isSyncingFromCloud = false
+            }
         }
     }
 

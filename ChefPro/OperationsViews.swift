@@ -240,38 +240,41 @@ struct AddWriteOffView: View {
 struct GlobalSearchView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var query = ""
+    @FocusState private var focused: Bool
+
+    private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
     private var matchedDishes: [Dish] {
-        guard !query.isEmpty else { return [] }
+        guard !trimmed.isEmpty else { return [] }
         return store.dishes.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.category.localizedCaseInsensitiveContains(query) ||
-            $0.allergens.contains(where: { $0.localizedCaseInsensitiveContains(query) }) ||
-            $0.ingredients.contains(where: { $0.productName.localizedCaseInsensitiveContains(query) })
+            $0.name.localizedCaseInsensitiveContains(trimmed) ||
+            $0.category.localizedCaseInsensitiveContains(trimmed) ||
+            $0.allergens.contains(where: { $0.localizedCaseInsensitiveContains(trimmed) }) ||
+            $0.ingredients.contains(where: { $0.productName.localizedCaseInsensitiveContains(trimmed) })
         }
     }
 
     private var matchedItems: [InventoryItem] {
-        guard !query.isEmpty else { return [] }
+        guard !trimmed.isEmpty else { return [] }
         return store.inventoryItems.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.category.localizedCaseInsensitiveContains(query)
+            $0.name.localizedCaseInsensitiveContains(trimmed) ||
+            $0.category.localizedCaseInsensitiveContains(trimmed)
         }
     }
 
     private var matchedSuppliers: [Supplier] {
-        guard !query.isEmpty else { return [] }
+        guard !trimmed.isEmpty else { return [] }
         return store.suppliers.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.phone.localizedCaseInsensitiveContains(query)
+            $0.name.localizedCaseInsensitiveContains(trimmed) ||
+            $0.phone.localizedCaseInsensitiveContains(trimmed)
         }
     }
 
     private var matchedEmployees: [Employee] {
-        guard !query.isEmpty else { return [] }
+        guard !trimmed.isEmpty else { return [] }
         return store.employees.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.position.localizedCaseInsensitiveContains(query)
+            $0.name.localizedCaseInsensitiveContains(trimmed) ||
+            $0.position.localizedCaseInsensitiveContains(trimmed)
         }
     }
 
@@ -280,86 +283,228 @@ struct GlobalSearchView: View {
     }
 
     var body: some View {
-        List {
-            if query.isEmpty {
-                EmptyStateView(icon: "magnifyingglass", title: "Поиск", subtitle: "Введите запрос для поиска по всем разделам.")
-                    .listRowBackground(Color.clear)
-            } else if !hasResults {
-                EmptyStateView(icon: "questionmark.circle", title: "Ничего не найдено", subtitle: "Попробуйте другой запрос.")
-                    .listRowBackground(Color.clear)
-            } else {
-                if !matchedDishes.isEmpty {
-                    Section("Блюда (\(matchedDishes.count))") {
-                        ForEach(matchedDishes) { dish in
-                            NavigationLink {
-                                DishDetailView(dish: dish).environmentObject(store)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(dish.name).font(.headline)
-                                    Text(dish.category).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Search bar
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 16, weight: .medium))
+                    TextField("Блюда, склад, сотрудники, поставщики…", text: $query)
+                        .focused($focused)
+                        .submitLabel(.search)
+                        .autocorrectionDisabled()
+                    if !query.isEmpty {
+                        Button { query = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                         }
                     }
                 }
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
 
-                if !matchedItems.isEmpty {
-                    Section("Склад (\(matchedItems.count))") {
-                        ForEach(matchedItems) { item in
-                            NavigationLink {
-                                InventoryDetailView(item: item).environmentObject(store)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(item.name).font(.headline)
-                                        Text(item.category).font(.caption).foregroundStyle(.secondary)
+                Divider()
+
+                if trimmed.isEmpty {
+                    // Prompt
+                    VStack(spacing: 16) {
+                        Spacer()
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 54)).foregroundStyle(.secondary.opacity(0.35))
+                        VStack(spacing: 6) {
+                            Text("Глобальный поиск").font(.title3.bold())
+                            Text("Ищет по техкартам, складу,\nпоставщикам и сотрудникам")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 32)
+                } else if !hasResults {
+                    VStack(spacing: 12) {
+                        Spacer()
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 48)).foregroundStyle(.secondary.opacity(0.35))
+                        Text("Ничего не найдено").font(.title3.bold())
+                        Text("Попробуй другой запрос").font(.subheadline).foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            if !matchedDishes.isEmpty {
+                                searchSection(title: "Техкарты", icon: "book.fill", color: .chefAccent, count: matchedDishes.count) {
+                                    ForEach(matchedDishes) { dish in
+                                        let cost = store.calculateDishCost(dish)
+                                        let fcPct = store.foodCostPercent(dish)
+                                        let fcColor: Color = fcPct > store.foodCostThreshold ? .red
+                                            : fcPct > store.foodCostThreshold * 0.85 ? .orange : .chefAccent
+                                        NavigationLink {
+                                            DishDetailView(dish: dish).environmentObject(store)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                ZStack {
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(fcColor.opacity(0.12)).frame(width: 40, height: 40)
+                                                    Image(systemName: "fork.knife")
+                                                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(fcColor)
+                                                }
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(dish.name).font(.subheadline.bold()).lineLimit(1)
+                                                    Text(dish.category).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                                    HStack(spacing: 5) {
+                                                        HStack(spacing: 2) {
+                                                            Image(systemName: "cart.fill").font(.system(size: 9)).foregroundStyle(.blue)
+                                                            Text(String(format: "%.2f", cost)).font(.caption.bold())
+                                                        }
+                                                        if dish.salePrice > 0 {
+                                                            Text("·").font(.caption).foregroundStyle(.secondary)
+                                                            HStack(spacing: 2) {
+                                                                Image(systemName: "tag.fill").font(.system(size: 9)).foregroundStyle(.green)
+                                                                Text(String(format: "%.2f", dish.salePrice)).font(.caption.bold())
+                                                            }
+                                                        }
+                                                    }
+                                                    .foregroundStyle(.primary)
+                                                }
+                                                Spacer(minLength: 4)
+                                                if dish.salePrice > 0 {
+                                                    VStack(alignment: .trailing, spacing: 2) {
+                                                        Text(String(format: "%.0f%%", fcPct)).font(.headline.bold()).foregroundStyle(fcColor)
+                                                        Text("FC").font(.caption2).foregroundStyle(.secondary)
+                                                    }
+                                                }
+                                                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
+                                            }
+                                            .padding(.horizontal, 14).padding(.vertical, 10)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    Spacer()
-                                    Text("\(item.quantity, specifier: "%.1f") \(item.unit)")
-                                        .font(.subheadline).foregroundStyle(.secondary)
                                 }
                             }
-                        }
-                    }
-                }
 
-                if !matchedSuppliers.isEmpty {
-                    Section("Поставщики (\(matchedSuppliers.count))") {
-                        ForEach(matchedSuppliers) { supplier in
-                            NavigationLink {
-                                SupplierDetailView(supplier: supplier).environmentObject(store)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(supplier.name).font(.headline)
-                                    if !supplier.phone.isEmpty {
-                                        Text(supplier.phone).font(.caption).foregroundStyle(.secondary)
+                            if !matchedItems.isEmpty {
+                                searchSection(title: "Склад", icon: "shippingbox.fill", color: .orange, count: matchedItems.count) {
+                                    ForEach(matchedItems) { item in
+                                        let low = item.quantity <= item.minQuantity
+                                        NavigationLink {
+                                            InventoryDetailView(item: item).environmentObject(store)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                ZStack {
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill((low ? Color.orange : Color.green).opacity(0.12)).frame(width: 40, height: 40)
+                                                    Image(systemName: "shippingbox.fill")
+                                                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(low ? .orange : .green)
+                                                }
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(item.name).font(.subheadline.bold()).lineLimit(1)
+                                                    Text(item.category).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                                }
+                                                Spacer(minLength: 4)
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    Text(String(format: "%.1f \(item.unit)", item.quantity))
+                                                        .font(.subheadline.bold()).foregroundStyle(low ? .orange : .primary)
+                                                    if low { Text("На исходе").font(.caption2).foregroundStyle(.orange) }
+                                                }
+                                                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
+                                            }
+                                            .padding(.horizontal, 14).padding(.vertical, 10)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+
+                            if !matchedSuppliers.isEmpty {
+                                searchSection(title: "Поставщики", icon: "building.2.fill", color: .blue, count: matchedSuppliers.count) {
+                                    ForEach(matchedSuppliers) { supplier in
+                                        NavigationLink {
+                                            SupplierDetailView(supplier: supplier).environmentObject(store)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                ZStack {
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(Color.blue.opacity(0.12)).frame(width: 40, height: 40)
+                                                    Image(systemName: "building.2.fill")
+                                                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.blue)
+                                                }
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(supplier.name).font(.subheadline.bold()).lineLimit(1)
+                                                    if !supplier.phone.isEmpty {
+                                                        Text(supplier.phone).font(.caption).foregroundStyle(.secondary)
+                                                    }
+                                                }
+                                                Spacer(minLength: 4)
+                                                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
+                                            }
+                                            .padding(.horizontal, 14).padding(.vertical, 10)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+
+                            if !matchedEmployees.isEmpty {
+                                searchSection(title: "Сотрудники", icon: "person.2.fill", color: .purple, count: matchedEmployees.count) {
+                                    ForEach(matchedEmployees) { emp in
+                                        HStack(spacing: 12) {
+                                            ZStack {
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(Color.purple.opacity(0.12)).frame(width: 40, height: 40)
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(.purple)
+                                            }
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(emp.name).font(.subheadline.bold()).lineLimit(1)
+                                                Text(emp.position).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                            }
+                                            Spacer(minLength: 4)
+                                            if emp.id == store.currentEmployeeID {
+                                                Text("Вы").font(.caption2.bold()).foregroundStyle(.chefAccent)
+                                            }
+                                        }
+                                        .padding(.horizontal, 14).padding(.vertical, 10)
                                     }
                                 }
                             }
                         }
-                    }
-                }
-
-                if !matchedEmployees.isEmpty {
-                    Section("Сотрудники (\(matchedEmployees.count))") {
-                        ForEach(matchedEmployees) { emp in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(emp.name).font(.headline)
-                                    Text(emp.position).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if emp.id == store.currentEmployeeID {
-                                    Text("Вы").font(.caption.bold()).foregroundStyle(.chefAccent)
-                                }
-                            }
-                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
                     }
                 }
             }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Поиск")
+            .navigationBarTitleDisplayMode(.large)
+            .onAppear { focused = true }
         }
-        .navigationTitle("Поиск")
-        .searchable(text: $query, prompt: "Блюдо, продукт, поставщик…")
+    }
+
+    @ViewBuilder
+    private func searchSection<Content: View>(
+        title: String, icon: String, color: Color, count: Int,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7).fill(color.opacity(0.15)).frame(width: 28, height: 28)
+                    Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
+                }
+                Text(title).font(.subheadline.bold())
+                Text("\(count)").font(.caption2.bold()).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(color).clipShape(Capsule())
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            Divider().padding(.leading, 14)
+            content()
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
 

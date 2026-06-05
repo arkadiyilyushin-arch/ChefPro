@@ -493,6 +493,30 @@ struct OperatingExpense: Identifiable, Codable {
     var notes:      String            = ""
 }
 
+// MARK: - Inventory Audit Records
+
+struct AuditLineRecord: Identifiable, Codable {
+    var id          = UUID()
+    var itemName:   String
+    var unit:       String
+    var category:   String
+    var systemQty:  Double
+    var actualQty:  Double
+    var difference: Double { actualQty - systemQty }
+}
+
+struct InventoryAuditRecord: Identifiable, Codable {
+    var id:               UUID   = UUID()
+    var date:             Date   = Date()
+    var auditor:          String = ""
+    var lines:            [AuditLineRecord] = []
+    var totalItems:       Int    { lines.count }
+    var filledItems:      Int    { lines.count }
+    var discrepancies:    Int    { lines.filter { abs($0.difference) > 0.001 }.count }
+    var totalShortage:    Double { lines.map { min($0.difference, 0) }.reduce(0, +) }
+    var totalSurplus:     Double { lines.map { max($0.difference, 0) }.reduce(0, +) }
+}
+
 // MARK: - Table Reservations
 
 enum ReservationStatus: String, Codable, CaseIterable {

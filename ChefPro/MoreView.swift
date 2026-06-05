@@ -36,7 +36,8 @@ struct MoreView: View {
                         MoreRow("Срок годности",        icon: "calendar.badge.exclamationmark", color: .orange,
                                 badge: store.expiringItems.isEmpty ? nil : "\(store.expiringItems.count)") { ExpiryWatchlistView().environmentObject(store) }
                         MoreRow("История движений",     icon: "clock.arrow.circlepath",         color: .orange) { StockMovementsView().environmentObject(store) }
-                        MoreRow("Инвентаризация",       icon: "list.clipboard.fill",            color: .orange) { InventoryAuditView().environmentObject(store) }
+                        MoreRow("Инвентаризация",       icon: "list.clipboard.fill",            color: .orange,
+                                badge: store.auditRecords.isEmpty ? nil : "\(store.auditRecords.count)") { AuditHistoryView().environmentObject(store) }
                         MoreRow("Шаблоны техкарт",      icon: "doc.text.fill",                  color: .orange) { RecipeTemplatesView().environmentObject(store) }
                         MoreRow("Калькулятор цены",     icon: "percent",                         color: .orange) { PriceCalculatorView().environmentObject(store) }
                         MoreRow("Калькулятор наценки",  icon: "arrow.up.right.circle.fill",     color: .orange) { MarkupCalculatorView().environmentObject(store) }

@@ -1688,15 +1688,20 @@ final class ChefProStore: ObservableObject {
         syncError = nil
         do {
             try await ChefProFirebaseService.shared.uploadAll(
-                dishes:         dishes,
-                inventoryItems: inventoryItems,
-                deliveries:     deliveries,
-                writeOffs:      writeOffs,
-                productions:    productions,
-                employees:      employees,
-                profile:        profile,
-                reservations:   reservations,
-                suppliers:      suppliers
+                dishes:              dishes,
+                inventoryItems:      inventoryItems,
+                deliveries:          deliveries,
+                writeOffs:           writeOffs,
+                productions:         productions,
+                employees:           employees,
+                profile:             profile,
+                reservations:        reservations,
+                suppliers:           suppliers,
+                kitchenOrders:       kitchenOrders,
+                closedKitchenOrders: closedKitchenOrders,
+                sales:               sales,
+                operatingExpenses:   operatingExpenses,
+                auditRecords:        auditRecords
             )
             lastSyncDate = Date()
             pendingSyncCount = 0
@@ -1716,15 +1721,20 @@ final class ChefProStore: ObservableObject {
         syncError = nil
         do {
             let data = try await ChefProFirebaseService.shared.downloadAll()
-            if !data.dishes.isEmpty         { dishes         = data.dishes }
-            if !data.inventoryItems.isEmpty { inventoryItems = data.inventoryItems }
-            if !data.deliveries.isEmpty     { deliveries     = data.deliveries }
-            if !data.writeOffs.isEmpty      { writeOffs      = data.writeOffs }
-            if !data.productions.isEmpty    { productions    = data.productions }
-            if !data.employees.isEmpty      { employees      = data.employees }
-            if !data.reservations.isEmpty   { reservations   = data.reservations }
-            if !data.suppliers.isEmpty      { suppliers      = data.suppliers }
-            if let p = data.profile         { profile = p }
+            if !data.dishes.isEmpty              { dishes              = data.dishes }
+            if !data.inventoryItems.isEmpty      { inventoryItems      = data.inventoryItems }
+            if !data.deliveries.isEmpty          { deliveries          = data.deliveries }
+            if !data.writeOffs.isEmpty           { writeOffs           = data.writeOffs }
+            if !data.productions.isEmpty         { productions         = data.productions }
+            if !data.employees.isEmpty           { employees           = data.employees }
+            if !data.reservations.isEmpty        { reservations        = data.reservations }
+            if !data.suppliers.isEmpty           { suppliers           = data.suppliers }
+            if !data.kitchenOrders.isEmpty       { kitchenOrders       = data.kitchenOrders }
+            if !data.closedKitchenOrders.isEmpty { closedKitchenOrders = data.closedKitchenOrders }
+            if !data.sales.isEmpty               { sales               = data.sales }
+            if !data.operatingExpenses.isEmpty   { operatingExpenses   = data.operatingExpenses }
+            if !data.auditRecords.isEmpty        { auditRecords        = data.auditRecords }
+            if let p = data.profile              { profile = p }
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {

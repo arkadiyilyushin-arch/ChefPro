@@ -108,15 +108,20 @@ final class ChefProFirebaseService: ObservableObject {
 
     // ── Upload ────────────────────────────────────────────────────────────
     func uploadAll(
-        dishes:         [Dish],
-        inventoryItems: [InventoryItem],
-        deliveries:     [Delivery],
-        writeOffs:      [WriteOff],
-        productions:    [Production],
-        employees:      [Employee],
-        profile:        UserProfile,
-        reservations:   [TableReservation],
-        suppliers:      [Supplier]
+        dishes:              [Dish],
+        inventoryItems:      [InventoryItem],
+        deliveries:          [Delivery],
+        writeOffs:           [WriteOff],
+        productions:         [Production],
+        employees:           [Employee],
+        profile:             UserProfile,
+        reservations:        [TableReservation],
+        suppliers:           [Supplier],
+        kitchenOrders:       [KitchenOrder],
+        closedKitchenOrders: [KitchenOrder],
+        sales:               [Sale],
+        operatingExpenses:   [OperatingExpense],
+        auditRecords:        [InventoryAuditRecord]
     ) async throws {
         try await signInAnonymouslyIfNeeded()
 
@@ -129,14 +134,19 @@ final class ChefProFirebaseService: ObservableObject {
             "updatedAt":           FieldValue.serverTimestamp()
         ], merge: true)
 
-        try await uploadCollection(dishes,         to: root.collection("dishes"))
-        try await uploadCollection(inventoryItems, to: root.collection("inventory"))
-        try await uploadCollection(deliveries,     to: root.collection("deliveries"))
-        try await uploadCollection(writeOffs,      to: root.collection("writeOffs"))
-        try await uploadCollection(productions,    to: root.collection("productions"))
-        try await uploadCollection(employees,      to: root.collection("employees"))
-        try await uploadCollection(reservations,   to: root.collection("reservations"))
-        try await uploadCollection(suppliers,      to: root.collection("suppliers"))
+        try await uploadCollection(dishes,              to: root.collection("dishes"))
+        try await uploadCollection(inventoryItems,      to: root.collection("inventory"))
+        try await uploadCollection(deliveries,          to: root.collection("deliveries"))
+        try await uploadCollection(writeOffs,           to: root.collection("writeOffs"))
+        try await uploadCollection(productions,         to: root.collection("productions"))
+        try await uploadCollection(employees,           to: root.collection("employees"))
+        try await uploadCollection(reservations,        to: root.collection("reservations"))
+        try await uploadCollection(suppliers,           to: root.collection("suppliers"))
+        try await uploadCollection(kitchenOrders,       to: root.collection("kitchenOrders"))
+        try await uploadCollection(closedKitchenOrders, to: root.collection("closedKitchenOrders"))
+        try await uploadCollection(sales,               to: root.collection("sales"))
+        try await uploadCollection(operatingExpenses,   to: root.collection("operatingExpenses"))
+        try await uploadCollection(auditRecords,        to: root.collection("auditRecords"))
         try root.collection("profile").document("current").setData(from: profile)
     }
 
@@ -146,28 +156,38 @@ final class ChefProFirebaseService: ObservableObject {
 
         let root = db.collection("restaurants").document(restaurantID)
 
-        async let dishes:         [Dish]             = downloadCollection(from: root.collection("dishes"))
-        async let inventoryItems: [InventoryItem]    = downloadCollection(from: root.collection("inventory"))
-        async let deliveries:     [Delivery]         = downloadCollection(from: root.collection("deliveries"))
-        async let writeOffs:      [WriteOff]         = downloadCollection(from: root.collection("writeOffs"))
-        async let productions:    [Production]       = downloadCollection(from: root.collection("productions"))
-        async let employees:      [Employee]         = downloadCollection(from: root.collection("employees"))
-        async let reservations:   [TableReservation] = downloadCollection(from: root.collection("reservations"))
-        async let suppliers:      [Supplier]         = downloadCollection(from: root.collection("suppliers"))
+        async let dishes:              [Dish]                  = downloadCollection(from: root.collection("dishes"))
+        async let inventoryItems:      [InventoryItem]         = downloadCollection(from: root.collection("inventory"))
+        async let deliveries:          [Delivery]              = downloadCollection(from: root.collection("deliveries"))
+        async let writeOffs:           [WriteOff]              = downloadCollection(from: root.collection("writeOffs"))
+        async let productions:         [Production]            = downloadCollection(from: root.collection("productions"))
+        async let employees:           [Employee]              = downloadCollection(from: root.collection("employees"))
+        async let reservations:        [TableReservation]      = downloadCollection(from: root.collection("reservations"))
+        async let suppliers:           [Supplier]              = downloadCollection(from: root.collection("suppliers"))
+        async let kitchenOrders:       [KitchenOrder]          = downloadCollection(from: root.collection("kitchenOrders"))
+        async let closedKitchenOrders: [KitchenOrder]          = downloadCollection(from: root.collection("closedKitchenOrders"))
+        async let sales:               [Sale]                  = downloadCollection(from: root.collection("sales"))
+        async let operatingExpenses:   [OperatingExpense]      = downloadCollection(from: root.collection("operatingExpenses"))
+        async let auditRecords:        [InventoryAuditRecord]  = downloadCollection(from: root.collection("auditRecords"))
 
         let profileSnap = try? await root.collection("profile").document("current").getDocument()
         let profile     = try? profileSnap?.data(as: UserProfile.self)
 
         return try await ChefProCloudData(
-            dishes:         dishes,
-            inventoryItems: inventoryItems,
-            deliveries:     deliveries,
-            writeOffs:      writeOffs,
-            productions:    productions,
-            employees:      employees,
-            profile:        profile,
-            reservations:   reservations,
-            suppliers:      suppliers
+            dishes:              dishes,
+            inventoryItems:      inventoryItems,
+            deliveries:          deliveries,
+            writeOffs:           writeOffs,
+            productions:         productions,
+            employees:           employees,
+            profile:             profile,
+            reservations:        reservations,
+            suppliers:           suppliers,
+            kitchenOrders:       kitchenOrders,
+            closedKitchenOrders: closedKitchenOrders,
+            sales:               sales,
+            operatingExpenses:   operatingExpenses,
+            auditRecords:        auditRecords
         )
     }
 
@@ -194,13 +214,18 @@ final class ChefProFirebaseService: ObservableObject {
 // MARK: - Cloud data bag
 
 struct ChefProCloudData {
-    var dishes:         [Dish]
-    var inventoryItems: [InventoryItem]
-    var deliveries:     [Delivery]
-    var writeOffs:      [WriteOff]
-    var productions:    [Production]
-    var employees:      [Employee]
-    var profile:        UserProfile?
-    var reservations:   [TableReservation]
-    var suppliers:      [Supplier]
+    var dishes:              [Dish]
+    var inventoryItems:      [InventoryItem]
+    var deliveries:          [Delivery]
+    var writeOffs:           [WriteOff]
+    var productions:         [Production]
+    var employees:           [Employee]
+    var profile:             UserProfile?
+    var reservations:        [TableReservation]
+    var suppliers:           [Supplier]
+    var kitchenOrders:       [KitchenOrder]
+    var closedKitchenOrders: [KitchenOrder]
+    var sales:               [Sale]
+    var operatingExpenses:   [OperatingExpense]
+    var auditRecords:        [InventoryAuditRecord]
 }

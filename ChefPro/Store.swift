@@ -1721,7 +1721,10 @@ final class ChefProStore: ObservableObject {
                 closedKitchenOrders: closedKitchenOrders,
                 sales:               sales,
                 operatingExpenses:   operatingExpenses,
-                auditRecords:        auditRecords
+                auditRecords:        auditRecords,
+                currentShift:        currentShift,
+                shiftHistory:        shiftHistory,
+                restaurantName:      restaurantName
             )
             lastSyncDate = Date()
             pendingSyncCount = 0
@@ -1755,6 +1758,9 @@ final class ChefProStore: ObservableObject {
             if !data.operatingExpenses.isEmpty   { operatingExpenses   = data.operatingExpenses }
             if !data.auditRecords.isEmpty        { auditRecords        = data.auditRecords }
             if let p = data.profile              { profile = p }
+            if let s = data.currentShift         { currentShift        = s }
+            if !data.shiftHistory.isEmpty        { shiftHistory        = data.shiftHistory }
+            if let n = data.restaurantName, !n.isEmpty { restaurantName = n }
             lastSyncDate = Date()
             UserDefaults.standard.set(lastSyncDate, forKey: lastSyncKey)
         } catch {

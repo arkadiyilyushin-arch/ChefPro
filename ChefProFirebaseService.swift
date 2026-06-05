@@ -13,7 +13,8 @@ final class ChefProFirebaseService: ObservableObject {
     private let deviceIDKey     = "chefpro_device_id"
 
     // ── Device ID (unique per install, never shared) ──────────────────────
-    var deviceID: String {
+    // nonisolated: UserDefaults is thread-safe, used from listener setup
+    nonisolated var deviceID: String {
         if let saved = UserDefaults.standard.string(forKey: deviceIDKey) { return saved }
         let id = UUID().uuidString
         UserDefaults.standard.set(id, forKey: deviceIDKey)
@@ -21,24 +22,20 @@ final class ChefProFirebaseService: ObservableObject {
     }
 
     // ── Restaurant ID (shared between devices for sync) ───────────────────
-    var restaurantID: String {
-        get {
-            if let saved = UserDefaults.standard.string(forKey: restaurantIDKey) { return saved }
-            let newID = UUID().uuidString
-            UserDefaults.standard.set(newID, forKey: restaurantIDKey)
-            return newID
-        }
+    nonisolated var restaurantID: String {
+        if let saved = UserDefaults.standard.string(forKey: restaurantIDKey) { return saved }
+        let newID = UUID().uuidString
+        UserDefaults.standard.set(newID, forKey: restaurantIDKey)
+        return newID
     }
 
     /// Sync code — first 8 chars, uppercase, easy to type/share
-    var syncCode: String {
+    nonisolated var syncCode: String {
         String(restaurantID.replacingOccurrences(of: "-", with: "").prefix(8).uppercased())
     }
 
     // ── Generic real-time collection listener ─────────────────────────────
-    /// Subscribes to a Firestore sub-collection and calls `onUpdate` with the
-    /// decoded array whenever the server pushes a change.
-    func startCollectionListener<T: Codable>(
+    nonisolated func startCollectionListener<T: Codable>(
         _ collectionName: String,
         onUpdate: @escaping ([T]) -> Void
     ) -> ListenerRegistration {
@@ -52,7 +49,7 @@ final class ChefProFirebaseService: ObservableObject {
     }
 
     // ── Root doc listener (currentShift + restaurantName from other devices) ─
-    func startRootDocListener(
+    nonisolated func startRootDocListener(
         onUpdate: @escaping (Shift?, String?) -> Void
     ) -> ListenerRegistration {
         let root = db.collection("restaurants").document(restaurantID)

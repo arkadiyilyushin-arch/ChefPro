@@ -134,11 +134,11 @@ final class ChefProStore: ObservableObject {
         if checklists.isEmpty { loadDefaultChecklists() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         startNetworkMonitoring()
-        Task {
+        Task { @MainActor in
             try? await ChefProFirebaseService.shared.registerAsMember()
             await syncFromCloud()
+            startAllRealtimeListeners()
         }
-        startAllRealtimeListeners()
     }
 
     // MARK: - Real-time per-collection listeners (all collections)

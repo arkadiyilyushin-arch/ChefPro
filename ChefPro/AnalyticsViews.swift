@@ -615,50 +615,147 @@ struct ProfitLossView: View {
         store.deliveries.filter { $0.date >= since }.reduce(0.0) { $0 + $1.price }
     }
 
+    private var opex: Double {
+        store.operatingExpenses.filter { $0.date >= since }.reduce(0.0) { $0 + $1.amount }
+    }
+
+    private var netProfit: Double { grossProfit - opex }
+    private var netMarginPct: Double { revenue > 0 ? netProfit / revenue * 100 : 0 }
+
+    private var opexByCategory: [(ExpenseCategory, Double)] {
+        ExpenseCategory.allCases.compactMap { cat in
+            let sum = store.operatingExpenses.filter { $0.date >= since && $0.category == cat }.reduce(0) { $0 + $1.amount }
+            return sum > 0 ? (cat, sum) : nil
+        }.sorted { $0.1 > $1.1 }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 Picker("Период", selection: $period) {
                     ForEach(Period.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
 
-                // Сводка
-                HStack(spacing: 14) {
-                    plCard(title: "Выручка", value: revenue, color: .green, icon: "arrow.up.circle.fill")
-                    plCard(title: "Себест.", value: cogs,    color: .orange, icon: "flame.fill")
+                // Top row: revenue / COGS
+                HStack(spacing: 12) {
+                    plCard(title: "Выручка",  value: revenue, color: .green,  icon: "arrow.up.circle.fill")
+                    plCard(title: "Себест.",  value: cogs,    color: .orange, icon: "flame.fill")
                 }
-                HStack(spacing: 14) {
-                    plCard(title: "Валовая прибыль", value: grossProfit,
+                .padding(.horizontal)
+
+                // Gross profit
+                HStack(spacing: 12) {
+                    plCard(title: "Вал. прибыль", value: grossProfit,
                            color: grossProfit >= 0 ? .green : .red, icon: "chart.line.uptrend.xyaxis")
                     BigCard {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Маржа", systemImage: "percent").font(.subheadline).foregroundStyle(.secondary)
-                            Text("\(grossMarginPct, specifier: "%.1f")%")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Вал. маржа", systemImage: "percent").font(.caption).foregroundStyle(.secondary)
+                            Text(String(format: "%.1f%%", grossMarginPct))
                                 .font(.title2.bold())
                                 .foregroundStyle(grossMarginPct >= 60 ? Color.green : grossMarginPct >= 40 ? Color.orange : Color.red)
                         }
                     }
                 }
+                .padding(.horizontal)
 
+                // Opex block
+                if opex > 0 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "creditcard.fill").foregroundStyle(.purple).font(.subheadline)
+                            Text("Операционные расходы").font(.subheadline.bold())
+                            Spacer()
+                            Text(String(format: "−%.2f", opex)).font(.subheadline.bold()).foregroundStyle(.red)
+                        }
+                        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+                        Divider().padding(.leading, 14)
+                        ForEach(Array(opexByCategory.enumerated()), id: \.element.0) { idx, pair in
+                            let (cat, sum) = pair
+                            HStack(spacing: 10) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 7).fill(cat.color.opacity(0.12)).frame(width: 28, height: 28)
+                                    Image(systemName: cat.icon).font(.system(size: 11, weight: .semibold)).foregroundStyle(cat.color)
+                                }
+                                Text(cat.rawValue).font(.subheadline).foregroundStyle(.secondary)
+                                Spacer()
+                                Text(String(format: "%.2f", sum)).font(.subheadline.bold())
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            if idx < opexByCategory.count - 1 { Divider().padding(.leading, 52) }
+                        }
+                        Divider().padding(.leading, 14)
+                        // Net profit row
+                        HStack {
+                            Label("Чистая прибыль", systemImage: "checkmark.seal.fill").font(.subheadline.bold())
+                                .foregroundStyle(netProfit >= 0 ? Color.green : Color.red)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(String(format: "%.2f", netProfit))
+                                    .font(.headline.bold())
+                                    .foregroundStyle(netProfit >= 0 ? Color.green : Color.red)
+                                Text(String(format: "%.1f%%", netMarginPct))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                    }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal)
+                } else {
+                    // Net profit without opex
+                    HStack(spacing: 12) {
+                        plCard(title: "Чистая прибыль", value: netProfit,
+                               color: netProfit >= 0 ? .green : .red, icon: "checkmark.seal.fill")
+                        BigCard {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label("Чист. маржа", systemImage: "percent").font(.caption).foregroundStyle(.secondary)
+                                Text(String(format: "%.1f%%", netMarginPct))
+                                    .font(.title2.bold())
+                                    .foregroundStyle(netMarginPct >= 20 ? Color.green : netMarginPct >= 0 ? Color.orange : Color.red)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    NavigationLink {
+                        OperatingExpensesView().environmentObject(store)
+                    } label: {
+                        Label("Добавить операционные расходы", systemImage: "plus.circle")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.purple)
+                    .padding(.horizontal)
+                }
+
+                // Detail table
                 BigCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Детализация", systemImage: "list.bullet.rectangle").font(.headline)
                         Divider()
-                        plRow(label: "Продажи (шт.)",       value: "\(store.sales.filter { $0.date >= since }.reduce(0) { $0 + $1.portions }) порц.")
-                        plRow(label: "Производств",          value: "\(store.productions.filter { $0.date >= since }.count)")
-                        plRow(label: "Приёмок на сумму",     value: String(format: "%.2f", deliveryCosts))
-                        plRow(label: "Списаний",             value: "\(store.writeOffs.filter { $0.date >= since }.count) шт.")
+                        plRow(label: "Продажи (порц.)", value: "\(store.sales.filter { $0.date >= since }.reduce(0) { $0 + $1.portions })")
+                        plRow(label: "Производств",     value: "\(store.productions.filter { $0.date >= since }.count)")
+                        plRow(label: "Приёмок",         value: String(format: "%.2f", deliveryCosts))
+                        plRow(label: "Списаний",        value: "\(store.writeOffs.filter { $0.date >= since }.count) шт.")
+                        if opex > 0 {
+                            plRow(label: "Оп. расходы", value: String(format: "%.2f", opex))
+                        }
                     }
                 }
+                .padding(.horizontal)
 
                 if store.sales.isEmpty {
                     EmptyStateView(icon: "bag", title: "Нет данных о продажах",
                                   subtitle: "Добавляйте продажи в разделе «Продажи» для расчёта выручки.")
+                        .padding(.horizontal)
                 }
             }
-            .padding()
+            .padding(.vertical)
         }
         .background(Color.chefBackground)
         .navigationTitle("P&L")

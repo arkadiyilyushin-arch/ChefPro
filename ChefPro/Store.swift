@@ -59,6 +59,7 @@ final class ChefProStore: ObservableObject {
     @Published var appLanguage: AppLanguage = .russian    { didSet { saveData() } }
     @Published var stockMovements: [StockMovement] = []   { didSet { saveData() } }
 
+    @Published var operatingExpenses: [OperatingExpense] = [] { didSet { saveData() } }
     @Published var reservations: [TableReservation] = []   { didSet { saveData() } }
     @Published var loyaltyCards:  [LoyaltyCard]       = []   { didSet { saveData() } }
     @Published var posRecords:    [POSSaleRecord]      = []   { didSet { saveData() } }
@@ -111,6 +112,7 @@ final class ChefProStore: ObservableObject {
     private let reservationsKey       = "chefpro_reservations_v1"
     private let loyaltyCardsKey       = "chefpro_loyalty_cards_v1"
     private let posRecordsKey         = "chefpro_pos_records_v1"
+    private let operatingExpensesKey  = "chefpro_opex_v1"
 
     // MARK: - Data Version Migration
     private let dataVersionKey    = "chefpro_data_version"
@@ -1622,6 +1624,7 @@ final class ChefProStore: ObservableObject {
         save(temperatureLogs, key: temperatureLogsKey)
         save(recipeVersions, key: recipeVersionsKey)
         save(stockMovements, key: stockMovementsKey)
+        save(operatingExpenses, key: operatingExpensesKey)
         save(reservations, key: reservationsKey)
         save(loyaltyCards,  key: loyaltyCardsKey)
         save(posRecords,    key: posRecordsKey)
@@ -1771,6 +1774,7 @@ final class ChefProStore: ObservableObject {
         temperatureLogs = load([TemperatureLog].self, key: temperatureLogsKey) ?? []
         recipeVersions  = load([RecipeVersion].self, key: recipeVersionsKey) ?? []
         stockMovements  = load([StockMovement].self, key: stockMovementsKey) ?? []
+        operatingExpenses = load([OperatingExpense].self, key: operatingExpensesKey) ?? []
         reservations    = load([TableReservation].self, key: reservationsKey) ?? []
         loyaltyCards    = load([LoyaltyCard].self,      key: loyaltyCardsKey) ?? []
         posRecords      = load([POSSaleRecord].self,     key: posRecordsKey) ?? []

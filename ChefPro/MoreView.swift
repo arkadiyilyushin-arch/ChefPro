@@ -17,6 +17,7 @@ struct MoreView: View {
                         MoreRow("Menu Engineering",     icon: "chart.bar.xaxis",                    color: .blue) { MenuEngineeringView().environmentObject(store) }
                         MoreRow("Продажи",              icon: "bag.fill",                           color: .blue, badge: store.sales.isEmpty ? nil : "\(store.sales.count)") { SalesView().environmentObject(store) }
                         MoreRow("P&L",                  icon: "chart.line.uptrend.xyaxis.circle.fill", color: .blue) { ProfitLossView().environmentObject(store) }
+                        MoreRow("Операц. расходы",      icon: "creditcard.fill",                    color: .blue, badge: store.operatingExpenses.isEmpty ? nil : "\(store.operatingExpenses.count)") { OperatingExpensesView().environmentObject(store) }
                         MoreRow("Динамика Food Cost",   icon: "waveform.path.ecg",                  color: .blue) { FoodCostTrendView().environmentObject(store) }
                         MoreRow("FC по периодам",       icon: "calendar.badge.clock",               color: .blue) { FoodCostByPeriodView().environmentObject(store) }
                         MoreRow("Топ-10 затрат",        icon: "flame.fill",                         color: .blue) { TopDishCostView().environmentObject(store) }

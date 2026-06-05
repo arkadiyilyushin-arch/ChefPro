@@ -1160,8 +1160,8 @@ struct AuditDetailView: View {
                     HStack(spacing: 10) {
                         detailChip(icon: "list.clipboard.fill", label: "Позиций",    value: "\(record.filledItems)",      color: .blue)
                         detailChip(icon: "exclamationmark.triangle.fill", label: "Расхождений", value: "\(record.discrepancies)", color: record.discrepancies > 0 ? .orange : .green)
-                        detailChip(icon: "arrow.down.circle.fill", label: "Недостача", value: "\(abs(record.totalShortage), specifier: "%.1f")", color: .red)
-                        detailChip(icon: "arrow.up.circle.fill",   label: "Излишек",   value: "\(record.totalSurplus, specifier: "%.1f")",       color: .green)
+                        detailChip(icon: "arrow.down.circle.fill", label: "Недостача", value: String(format: "%.1f", abs(record.totalShortage)), color: .red)
+                        detailChip(icon: "arrow.up.circle.fill",   label: "Излишек",   value: String(format: "%.1f", record.totalSurplus),       color: .green)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)

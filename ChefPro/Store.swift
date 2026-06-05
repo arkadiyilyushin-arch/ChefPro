@@ -139,6 +139,7 @@ final class ChefProStore: ObservableObject {
         }
         startRemoteChangeListener()
         startEmployeeSync()
+        startKitchenOrdersSync()
     }
 
     // MARK: - Real-time remote change listener
@@ -147,6 +148,16 @@ final class ChefProStore: ObservableObject {
             ChefProFirebaseService.shared.startListening {
                 await self.syncFromCloud()
             }
+        }
+    }
+
+    // MARK: - Real-time kitchen orders listener (instant, no debounce)
+    private func startKitchenOrdersSync() {
+        ChefProFirebaseService.shared.startKitchenOrdersListener { [weak self] orders in
+            guard let self else { return }
+            self.isSyncingFromCloud = true
+            self.kitchenOrders = orders
+            self.isSyncingFromCloud = false
         }
     }
 
@@ -325,6 +336,7 @@ final class ChefProStore: ObservableObject {
     func addKitchenOrder(_ order: KitchenOrder) {
         kitchenOrders.append(order)
         scheduleKitchenOrderNotification(order)
+        Task { try? await ChefProFirebaseService.shared.uploadKitchenOrder(order) }
     }
 
     private func scheduleKitchenOrderNotification(_ order: KitchenOrder) {
@@ -349,6 +361,8 @@ final class ChefProStore: ObservableObject {
         case .ready:   kitchenOrders[idx].readyAt = Date()
         default: break
         }
+        let updated = kitchenOrders[idx]
+        Task { try? await ChefProFirebaseService.shared.uploadKitchenOrder(updated) }
     }
 
     func deleteKitchenOrder(_ order: KitchenOrder) {
@@ -365,6 +379,10 @@ final class ChefProStore: ObservableObject {
         closedKitchenOrders.insert(order, at: 0)
         if closedKitchenOrders.count > 100 {
             closedKitchenOrders = Array(closedKitchenOrders.prefix(100))
+        }
+        Task {
+            try? await ChefProFirebaseService.shared.deleteKitchenOrder(id: order.id)
+            try? await ChefProFirebaseService.shared.uploadClosedKitchenOrder(order)
         }
     }
 
@@ -1665,7 +1683,7 @@ final class ChefProStore: ObservableObject {
         }
     }
 
-    // Debounced auto-upload: waits 4 s after the last change before sending to Firestore
+    // Debounced auto-upload: waits 2 s after the last change before sending to Firestore
     private func scheduleUpload() {
         guard !isSyncingFromCloud else { return }
         if isOffline {
@@ -1675,7 +1693,7 @@ final class ChefProStore: ObservableObject {
         uploadTask?.cancel()
         uploadTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else { return }
             await self.syncToCloud()
         }

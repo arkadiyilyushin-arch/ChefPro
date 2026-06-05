@@ -127,13 +127,7 @@ final class ChefProFirebaseService: ObservableObject {
 
         let root = db.collection("restaurants").document(restaurantID)
 
-        // Root document: stamp which device last updated
-        try await root.setData([
-            "restaurantID":        restaurantID,
-            "lastUpdatedByDevice": deviceID,
-            "updatedAt":           FieldValue.serverTimestamp()
-        ], merge: true)
-
+        // Upload all subcollections FIRST
         try await uploadCollection(dishes,              to: root.collection("dishes"))
         try await uploadCollection(inventoryItems,      to: root.collection("inventory"))
         try await uploadCollection(deliveries,          to: root.collection("deliveries"))
@@ -148,6 +142,52 @@ final class ChefProFirebaseService: ObservableObject {
         try await uploadCollection(operatingExpenses,   to: root.collection("operatingExpenses"))
         try await uploadCollection(auditRecords,        to: root.collection("auditRecords"))
         try root.collection("profile").document("current").setData(from: profile)
+
+        // Touch root doc LAST — this triggers the real-time listener on other
+        // devices only after all subcollection data is already written.
+        try await root.setData([
+            "restaurantID":        restaurantID,
+            "lastUpdatedByDevice": deviceID,
+            "updatedAt":           FieldValue.serverTimestamp()
+        ], merge: true)
+    }
+
+    // ── Fast per-document kitchen order ops (no 4 s debounce) ────────────
+    func uploadKitchenOrder(_ order: KitchenOrder) async throws {
+        try await signInAnonymouslyIfNeeded()
+        let col = db.collection("restaurants").document(restaurantID).collection("kitchenOrders")
+        try col.document(order.id.uuidString).setData(from: order)
+    }
+
+    func deleteKitchenOrder(id: UUID) async throws {
+        try await signInAnonymouslyIfNeeded()
+        let col = db.collection("restaurants").document(restaurantID).collection("kitchenOrders")
+        try await col.document(id.uuidString).delete()
+    }
+
+    func uploadClosedKitchenOrder(_ order: KitchenOrder) async throws {
+        try await signInAnonymouslyIfNeeded()
+        let col = db.collection("restaurants").document(restaurantID).collection("closedKitchenOrders")
+        try col.document(order.id.uuidString).setData(from: order)
+    }
+
+    // ── Real-time kitchen orders listener ─────────────────────────────────
+    private var kitchenOrdersListener: ListenerRegistration?
+
+    func startKitchenOrdersListener(onUpdate: @escaping ([KitchenOrder]) -> Void) {
+        kitchenOrdersListener?.remove()
+        let col = db.collection("restaurants").document(restaurantID).collection("kitchenOrders")
+        kitchenOrdersListener = col.addSnapshotListener { snapshot, error in
+            guard let snapshot, error == nil,
+                  snapshot.metadata.isFromCache == false else { return }
+            let orders = snapshot.documents.compactMap { try? $0.data(as: KitchenOrder.self) }
+            DispatchQueue.main.async { onUpdate(orders) }
+        }
+    }
+
+    func stopKitchenOrdersListener() {
+        kitchenOrdersListener?.remove()
+        kitchenOrdersListener = nil
     }
 
     // ── Download ──────────────────────────────────────────────────────────

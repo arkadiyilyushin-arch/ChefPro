@@ -117,17 +117,15 @@ struct iPhoneTabView: View {
             .environmentObject(store)
             .tabItem { Label(store.appLanguage == .english ? "Recipes" : "Техкарты", systemImage: "book.fill") }
 
+            GlobalSearchView()
+                .environmentObject(store)
+                .tabItem { Label(store.appLanguage == .english ? "Search" : "Поиск", systemImage: "magnifyingglass") }
+
             PermissionGate(permission: "Склад") {
                 InventoryView()
             }
             .environmentObject(store)
             .tabItem { Label(store.appLanguage == .english ? "Inventory" : "Склад", systemImage: "shippingbox.fill") }
-
-            PermissionGate(permission: "Приемка") {
-                DeliveriesView()
-            }
-            .environmentObject(store)
-            .tabItem { Label(store.appLanguage == .english ? "Deliveries" : "Приемка", systemImage: "tray.and.arrow.down.fill") }
 
             MoreView()
                 .environmentObject(store)

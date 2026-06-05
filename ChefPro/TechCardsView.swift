@@ -106,7 +106,6 @@ struct TechCardsView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showAddDish = false
     @State private var showScanner = false
-    @State private var searchText = ""
     @State private var selectedCategory = "Все"
     @State private var selectedStatus: DishMenuStatus? = nil
     @State private var dishSortOrder: DishSortOrder = .name
@@ -118,15 +117,10 @@ struct TechCardsView: View {
 
     var filteredDishes: [Dish] {
         var base = store.dishes.filter { dish in
-            let ingredientNames = dish.ingredients.map { $0.productName }.joined(separator: " ")
-            let matchesSearch = searchText.isEmpty ||
-            dish.name.localizedCaseInsensitiveContains(searchText) ||
-            dish.category.localizedCaseInsensitiveContains(searchText) ||
-            ingredientNames.localizedCaseInsensitiveContains(searchText)
             let matchesCategory = selectedCategory == "Все" || dish.category == selectedCategory
             let matchesStatus = selectedStatus == nil || dish.menuStatus == selectedStatus
             let matchesType = dish.dishType == selectedType
-            return matchesSearch && matchesCategory && matchesStatus && matchesType
+            return matchesCategory && matchesStatus && matchesType
         }
         // Favorites first unless sorted otherwise
         switch dishSortOrder {
@@ -258,7 +252,6 @@ struct TechCardsView: View {
                 }
             }
             .background(Color.chefBackground)
-            .searchable(text: $searchText, prompt: "Поиск блюда или ингредиента")
             .navigationTitle("Техкарты")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

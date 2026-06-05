@@ -121,13 +121,16 @@ final class ChefProFirebaseService: ObservableObject {
         closedKitchenOrders: [KitchenOrder],
         sales:               [Sale],
         operatingExpenses:   [OperatingExpense],
-        auditRecords:        [InventoryAuditRecord]
+        auditRecords:        [InventoryAuditRecord],
+        currentShift:        Shift?,
+        shiftHistory:        [Shift],
+        restaurantName:      String
     ) async throws {
         try await signInAnonymouslyIfNeeded()
 
         let root = db.collection("restaurants").document(restaurantID)
 
-        // Upload all subcollections FIRST
+        // Загружаем все подколлекции СНАЧАЛА
         try await uploadCollection(dishes,              to: root.collection("dishes"))
         try await uploadCollection(inventoryItems,      to: root.collection("inventory"))
         try await uploadCollection(deliveries,          to: root.collection("deliveries"))
@@ -141,15 +144,26 @@ final class ChefProFirebaseService: ObservableObject {
         try await uploadCollection(sales,               to: root.collection("sales"))
         try await uploadCollection(operatingExpenses,   to: root.collection("operatingExpenses"))
         try await uploadCollection(auditRecords,        to: root.collection("auditRecords"))
+        try await uploadCollection(shiftHistory,        to: root.collection("shiftHistory"))
         try root.collection("profile").document("current").setData(from: profile)
 
-        // Touch root doc LAST — this triggers the real-time listener on other
-        // devices only after all subcollection data is already written.
-        try await root.setData([
-            "restaurantID":        restaurantID,
-            "lastUpdatedByDevice": deviceID,
-            "updatedAt":           FieldValue.serverTimestamp()
-        ], merge: true)
+        // Текущая смена и название заведения — в root-документ
+        var rootData: [String: Any] = [
+            "restaurantName": restaurantName
+        ]
+        if let shift = currentShift,
+           let encoded = try? Firestore.Encoder().encode(shift) {
+            rootData["currentShift"] = encoded
+        } else {
+            rootData["currentShift"] = FieldValue.delete()
+        }
+
+        // Root-документ обновляем ПОСЛЕДНИМ — тригерит слушателей на других устройствах
+        // только после того как все данные уже записаны
+        rootData["restaurantID"]        = restaurantID
+        rootData["lastUpdatedByDevice"] = deviceID
+        rootData["updatedAt"]           = FieldValue.serverTimestamp()
+        try await root.setData(rootData, merge: true)
     }
 
     // ── Fast per-document kitchen order ops (no 4 s debounce) ────────────
@@ -209,9 +223,19 @@ final class ChefProFirebaseService: ObservableObject {
         async let sales:               [Sale]                  = downloadCollection(from: root.collection("sales"))
         async let operatingExpenses:   [OperatingExpense]      = downloadCollection(from: root.collection("operatingExpenses"))
         async let auditRecords:        [InventoryAuditRecord]  = downloadCollection(from: root.collection("auditRecords"))
+        async let shiftHistory:        [Shift]                 = downloadCollection(from: root.collection("shiftHistory"))
 
         let profileSnap = try? await root.collection("profile").document("current").getDocument()
         let profile     = try? profileSnap?.data(as: UserProfile.self)
+
+        // Смена и название заведения хранятся прямо в root-документе
+        let rootSnap       = try? await root.getDocument()
+        let rootData       = rootSnap?.data()
+        let restaurantName = rootData?["restaurantName"] as? String
+        let currentShift: Shift? = {
+            guard let raw = rootData?["currentShift"] else { return nil }
+            return try? Firestore.Decoder().decode(Shift.self, from: raw)
+        }()
 
         return try await ChefProCloudData(
             dishes:              dishes,
@@ -227,7 +251,10 @@ final class ChefProFirebaseService: ObservableObject {
             closedKitchenOrders: closedKitchenOrders,
             sales:               sales,
             operatingExpenses:   operatingExpenses,
-            auditRecords:        auditRecords
+            auditRecords:        auditRecords,
+            shiftHistory:        shiftHistory,
+            currentShift:        currentShift,
+            restaurantName:      restaurantName
         )
     }
 
@@ -268,4 +295,7 @@ struct ChefProCloudData {
     var sales:               [Sale]
     var operatingExpenses:   [OperatingExpense]
     var auditRecords:        [InventoryAuditRecord]
+    var shiftHistory:        [Shift]
+    var currentShift:        Shift?
+    var restaurantName:      String?
 }

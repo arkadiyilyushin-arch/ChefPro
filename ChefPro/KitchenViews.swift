@@ -427,6 +427,7 @@ struct StopGoRow: View {
                 .background(dish.isStopListed ? Color.red : Color(.systemGray5))
                 .foregroundStyle(dish.isStopListed ? .white : .secondary)
                 .clipShape(Capsule())
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
 
@@ -446,6 +447,7 @@ struct StopGoRow: View {
                 .background(dish.isGoListed ? Color.green : Color(.systemGray5))
                 .foregroundStyle(dish.isGoListed ? .white : .secondary)
                 .clipShape(Capsule())
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -534,6 +536,7 @@ struct KitchenDishButton: View {
             .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

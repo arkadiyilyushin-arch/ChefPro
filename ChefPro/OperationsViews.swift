@@ -379,6 +379,7 @@ struct GlobalSearchView: View {
                                                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
                                             }
                                             .padding(.horizontal, 14).padding(.vertical, 10)
+                                            .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -412,6 +413,7 @@ struct GlobalSearchView: View {
                                                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
                                             }
                                             .padding(.horizontal, 14).padding(.vertical, 10)
+                                            .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -441,6 +443,7 @@ struct GlobalSearchView: View {
                                                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary.opacity(0.4))
                                             }
                                             .padding(.horizontal, 14).padding(.vertical, 10)
+                                            .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
                                     }

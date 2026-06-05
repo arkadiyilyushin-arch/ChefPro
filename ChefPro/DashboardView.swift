@@ -210,28 +210,28 @@ struct DashboardView: View {
                                 subtitle: store.lowStockItems.isEmpty ? "позиций" : "⚠ \(store.lowStockItems.count) заканч.",
                                 icon: "shippingbox.fill",
                                 accent: store.lowStockItems.isEmpty ? .chefAccent : .orange
-                            )
+                            ).contentShape(Rectangle())
                         }.buttonStyle(.plain)
 
                         NavigationLink {
                             TechCardsView().environmentObject(store)
                         } label: {
                             StatCard(title: "Техкарты", value: "\(store.dishes.count)", subtitle: "блюд",
-                                     icon: "book.fill", accent: .chefAccent)
+                                     icon: "book.fill", accent: .chefAccent).contentShape(Rectangle())
                         }.buttonStyle(.plain)
 
                         NavigationLink {
                             ReportsView().environmentObject(store)
                         } label: {
                             StatCard(title: "Производство", value: "\(store.productions.count)", subtitle: "операций",
-                                     icon: "flame.fill", accent: .orange)
+                                     icon: "flame.fill", accent: .orange).contentShape(Rectangle())
                         }.buttonStyle(.plain)
 
                         NavigationLink {
                             WriteOffsView().environmentObject(store)
                         } label: {
                             StatCard(title: "Списания", value: "\(store.writeOffs.count)", subtitle: "операций",
-                                     icon: "trash.fill", accent: .red)
+                                     icon: "trash.fill", accent: .red).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
 
@@ -256,6 +256,7 @@ struct DashboardView: View {
                                     Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                                 }
                             }
+                            .contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
 
@@ -283,6 +284,7 @@ struct DashboardView: View {
                                         .font(.title2.bold()).foregroundStyle(.blue)
                                 }
                             }
+                            .contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
 
@@ -327,6 +329,7 @@ struct DashboardView: View {
                                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                                     }
                                 }
+                                .contentShape(Rectangle())
                             }.buttonStyle(.plain)
                         }
                     }
@@ -390,7 +393,7 @@ struct DashboardView: View {
                         return expired > 0 ? "\(expired) просрочено · \(expiring) истекает" : "\(expiring) позиций истекает через ≤3 дня"
                     }(),
                     subtitleColor: store.expiringItems.filter(\.isExpired).isEmpty ? .secondary : .red
-                )
+                ).contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
 
@@ -402,7 +405,7 @@ struct DashboardView: View {
                     title: "Высокий Food Cost",
                     subtitle: "\(highFoodCostDishes.count) блюд превышает \(Int(store.foodCostThreshold))%",
                     subtitleColor: .secondary
-                )
+                ).contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
     }
@@ -508,5 +511,6 @@ struct QuickActionLabel: View {
                 .foregroundStyle(.primary)
         }
         .frame(width: 70)
+        .contentShape(Rectangle())
     }
 }

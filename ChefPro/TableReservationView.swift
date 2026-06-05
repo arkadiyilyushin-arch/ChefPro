@@ -226,6 +226,8 @@ struct AddReservationView: View {
 
     @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("chefpro_floor_tables") private var tablesData: Data = Data()
+
     @State private var guestName   = ""
     @State private var guestPhone  = ""
     @State private var tableNumber = ""
@@ -233,6 +235,7 @@ struct AddReservationView: View {
     @State private var date: Date
     @State private var duration    = 120
     @State private var notes       = ""
+    @State private var tablePickerExpanded = false
 
     init(presetDate: Date, onSave: @escaping (TableReservation) -> Void) {
         self.presetDate = presetDate
@@ -242,20 +245,30 @@ struct AddReservationView: View {
         _date = State(initialValue: Calendar.current.date(from: comps) ?? presetDate)
     }
 
-    // Conflict: same table, overlapping time, not cancelled
+    private var availableTables: [FloorTable] {
+        ((try? JSONDecoder().decode([FloorTable].self, from: tablesData)) ?? defaultFloorTables())
+            .sorted { (Int($0.number) ?? 0) < (Int($1.number) ?? 0) }
+    }
+
+    // Conflict with 15-min cleaning buffer between reservations
     private var conflictingReservation: TableReservation? {
-        guard !tableNumber.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        guard !tableNumber.isEmpty else { return nil }
+        let buffer: TimeInterval = 15 * 60
         let endDate = date.addingTimeInterval(Double(duration) * 60)
         return store.reservations.first { existing in
             existing.tableNumber == tableNumber &&
             existing.status != .cancelled &&
-            date < existing.endDate &&
-            endDate > existing.date
+            date < existing.endDate.addingTimeInterval(buffer) &&
+            endDate.addingTimeInterval(buffer) > existing.date
         }
     }
 
+    private var tableIsEmpty: Bool { tableNumber.isEmpty }
+
     private var canSave: Bool {
-        !guestName.isEmpty && conflictingReservation == nil
+        !guestName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !tableNumber.isEmpty &&
+        conflictingReservation == nil
     }
 
     var body: some View {
@@ -267,14 +280,34 @@ struct AddReservationView: View {
                         .keyboardType(.phonePad)
                 }
 
-                Section("Бронирование") {
-                    HStack {
-                        Text("Стол №")
-                        TextField("Номер стола", text: $tableNumber)
-                            .keyboardType(.numberPad)
+                Section {
+                    // Table picker — выпадающий список
+                    Picker(selection: $tableNumber) {
+                        Text("Не выбран").tag("").foregroundStyle(.red)
+                        ForEach(availableTables, id: \.number) { table in
+                            Text("Стол \(table.number)  ·  \(table.seats) мест").tag(table.number)
+                        }
+                    } label: {
+                        HStack {
+                            Text("Стол")
+                            if tableIsEmpty {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                            }
+                        }
                     }
+                    .pickerStyle(.navigationLink)
+                    .foregroundStyle(tableIsEmpty ? .red : .primary)
+
+                    if tableIsEmpty {
+                        Label("Выберите номер стола для бронирования", systemImage: "chair.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
                     Stepper("Гостей: \(persons)", value: $persons, in: 1...50)
-                    DatePicker("Время", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Дата и время", selection: $date, displayedComponents: [.date, .hourAndMinute])
                     Picker("Длительность", selection: $duration) {
                         Text("1 час").tag(60)
                         Text("1.5 часа").tag(90)
@@ -282,6 +315,11 @@ struct AddReservationView: View {
                         Text("2.5 часа").tag(150)
                         Text("3 часа").tag(180)
                     }
+                } header: {
+                    Text("Бронирование")
+                } footer: {
+                    Text("Между бронированиями одного стола — 15 минут на уборку")
+                        .font(.caption)
                 }
 
                 // Conflict warning
@@ -290,17 +328,23 @@ struct AddReservationView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.red)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Стол уже забронирован")
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Стол занят (с учётом уборки 15 мин)")
                                     .font(.subheadline.bold())
                                     .foregroundStyle(.red)
-                                let f = DateFormatter()
-                                let _ = { f.dateFormat = "HH:mm" }()
-                                Text("\(conflict.guestName) · \(f.string(from: conflict.date))–\(f.string(from: conflict.endDate))")
+                                let f: DateFormatter = {
+                                    let f = DateFormatter(); f.dateFormat = "HH:mm"; return f
+                                }()
+                                Text("\(conflict.guestName)  ·  \(f.string(from: conflict.date)) – \(f.string(from: conflict.endDate))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Text("Доступно с \(f.string(from: conflict.endDate.addingTimeInterval(15*60)))")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.orange)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
                 }
 
@@ -320,7 +364,7 @@ struct AddReservationView: View {
                         let res = TableReservation(
                             guestName: guestName,
                             guestPhone: guestPhone,
-                            tableNumber: tableNumber.isEmpty ? "?" : tableNumber,
+                            tableNumber: tableNumber,
                             persons: persons,
                             date: date,
                             duration: duration,
@@ -344,6 +388,7 @@ struct EditReservationView: View {
 
     @EnvironmentObject var store: ChefProStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("chefpro_floor_tables") private var tablesData: Data = Data()
     @State private var res: TableReservation
 
     init(reservation: TableReservation, onSave: @escaping (TableReservation) -> Void) {
@@ -352,17 +397,26 @@ struct EditReservationView: View {
         _res = State(initialValue: reservation)
     }
 
-    // Conflict: same table, overlapping time, excluding self, not cancelled
+    private var availableTables: [FloorTable] {
+        ((try? JSONDecoder().decode([FloorTable].self, from: tablesData)) ?? defaultFloorTables())
+            .sorted { (Int($0.number) ?? 0) < (Int($1.number) ?? 0) }
+    }
+
+    // Conflict with 15-min cleaning buffer, excluding self
     private var conflictingReservation: TableReservation? {
+        guard !res.tableNumber.isEmpty else { return nil }
+        let buffer: TimeInterval = 15 * 60
         let endDate = res.endDate
         return store.reservations.first { existing in
             existing.id != reservation.id &&
             existing.tableNumber == res.tableNumber &&
             existing.status != .cancelled &&
-            res.date < existing.endDate &&
-            endDate > existing.date
+            res.date < existing.endDate.addingTimeInterval(buffer) &&
+            endDate.addingTimeInterval(buffer) > existing.date
         }
     }
+
+    private var tableIsEmpty: Bool { res.tableNumber.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -372,14 +426,34 @@ struct EditReservationView: View {
                     TextField("Телефон", text: $res.guestPhone)
                         .keyboardType(.phonePad)
                 }
-                Section("Бронирование") {
-                    HStack {
-                        Text("Стол №")
-                        TextField("Номер стола", text: $res.tableNumber)
-                            .keyboardType(.numberPad)
+
+                Section {
+                    Picker(selection: $res.tableNumber) {
+                        Text("Не выбран").tag("").foregroundStyle(.red)
+                        ForEach(availableTables, id: \.number) { table in
+                            Text("Стол \(table.number)  ·  \(table.seats) мест").tag(table.number)
+                        }
+                    } label: {
+                        HStack {
+                            Text("Стол")
+                            if tableIsEmpty {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                            }
+                        }
                     }
+                    .pickerStyle(.navigationLink)
+                    .foregroundStyle(tableIsEmpty ? .red : .primary)
+
+                    if tableIsEmpty {
+                        Label("Выберите номер стола", systemImage: "chair.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
                     Stepper("Гостей: \(res.persons)", value: $res.persons, in: 1...50)
-                    DatePicker("Время", selection: $res.date, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Дата и время", selection: $res.date, displayedComponents: [.date, .hourAndMinute])
                     Picker("Длительность", selection: $res.duration) {
                         Text("1 час").tag(60)
                         Text("1.5 часа").tag(90)
@@ -387,6 +461,10 @@ struct EditReservationView: View {
                         Text("2.5 часа").tag(150)
                         Text("3 часа").tag(180)
                     }
+                } header: {
+                    Text("Бронирование")
+                } footer: {
+                    Text("Между бронированиями одного стола — 15 минут на уборку")
                 }
 
                 // Conflict warning
@@ -395,17 +473,23 @@ struct EditReservationView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.red)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Стол уже забронирован")
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Стол занят (с учётом уборки 15 мин)")
                                     .font(.subheadline.bold())
                                     .foregroundStyle(.red)
-                                let f = DateFormatter()
-                                let _ = { f.dateFormat = "HH:mm" }()
-                                Text("\(conflict.guestName) · \(f.string(from: conflict.date))–\(f.string(from: conflict.endDate))")
+                                let f: DateFormatter = {
+                                    let f = DateFormatter(); f.dateFormat = "HH:mm"; return f
+                                }()
+                                Text("\(conflict.guestName)  ·  \(f.string(from: conflict.date)) – \(f.string(from: conflict.endDate))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Text("Доступно с \(f.string(from: conflict.endDate.addingTimeInterval(15*60)))")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.orange)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
                 }
 
@@ -427,9 +511,15 @@ struct EditReservationView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Сохранить") { onSave(res); dismiss() }
-                        .disabled(conflictingReservation != nil)
+                        .disabled(tableIsEmpty || conflictingReservation != nil)
                 }
             }
         }
     }
+}
+
+// MARK: - Helpers
+
+private func defaultFloorTables() -> [FloorTable] {
+    (1...12).map { FloorTable(number: "\($0)", x: 0, y: 0, seats: 4) }
 }

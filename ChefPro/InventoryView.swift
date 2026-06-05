@@ -931,8 +931,20 @@ struct InventoryAuditView: View {
         let df = DateFormatter()
         df.dateStyle = .short
         let dateStr = df.string(from: auditDate)
+        let auditorName = auditor.isEmpty ? store.profile.name : auditor
+
+        // Build audit record lines from ALL filled entries
+        var lines: [AuditLineRecord] = []
         for entry in entries {
-            guard let actual = entry.actualDouble, entry.hasDiscrepancy,
+            guard let actual = entry.actualDouble else { continue }
+            lines.append(AuditLineRecord(
+                itemName:  entry.item.name,
+                unit:      entry.item.unit,
+                category:  entry.item.category,
+                systemQty: entry.item.quantity,
+                actualQty: actual
+            ))
+            guard entry.hasDiscrepancy,
                   let idx = store.inventoryItems.firstIndex(where: { $0.id == entry.item.id }) else { continue }
             let diff = actual - entry.item.quantity
             if diff < 0 {
@@ -940,12 +952,334 @@ struct InventoryAuditView: View {
                                   quantity: abs(diff),
                                   unit: entry.item.unit,
                                   reason: "Инвентаризация \(dateStr)",
-                                  employee: auditor.isEmpty ? store.profile.name : auditor,
+                                  employee: auditorName,
                                   date: auditDate)
                 store.writeOffs.append(wo)
             }
             store.inventoryItems[idx].quantity = actual
         }
+
+        // Save audit record
+        let record = InventoryAuditRecord(date: auditDate, auditor: auditorName, lines: lines)
+        store.auditRecords.insert(record, at: 0)
+
         entries = store.inventoryItems.map { AuditEntry(item: $0) }
+    }
+}
+
+// MARK: - Audit History
+
+struct AuditHistoryView: View {
+    @EnvironmentObject var store: ChefProStore
+    @State private var showNewAudit = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                if store.auditRecords.isEmpty {
+                    EmptyStateView(
+                        icon: "list.clipboard",
+                        title: "Нет инвентаризаций",
+                        subtitle: "Проведите первую инвентаризацию — она сохранится здесь для истории"
+                    )
+                    .padding(.top, 60)
+                } else {
+                    // Summary chips
+                    HStack(spacing: 10) {
+                        auditSummaryChip(
+                            icon: "list.clipboard.fill",
+                            label: "Всего",
+                            value: "\(store.auditRecords.count)",
+                            color: .blue
+                        )
+                        let lastDisc = store.auditRecords.first?.discrepancies ?? 0
+                        auditSummaryChip(
+                            icon: "exclamationmark.triangle.fill",
+                            label: "Расхождений",
+                            value: "\(lastDisc)",
+                            color: lastDisc > 0 ? .orange : .green
+                        )
+                        if let last = store.auditRecords.first {
+                            auditSummaryChip(
+                                icon: "calendar",
+                                label: "Последняя",
+                                value: last.date.formatted(.dateTime.day().month()),
+                                color: .purple
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    VStack(spacing: 0) {
+                        ForEach(store.auditRecords) { record in
+                            NavigationLink {
+                                AuditDetailView(record: record)
+                                    .environmentObject(store)
+                            } label: {
+                                auditRow(record)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if record.id != store.auditRecords.last?.id {
+                                Divider().padding(.leading, 60)
+                            }
+                        }
+                    }
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                }
+            }
+            .padding(.top, 4)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("История инвентаризаций")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    InventoryAuditView().environmentObject(store)
+                } label: {
+                    Image(systemName: "plus.circle.fill").font(.title2)
+                }
+            }
+        }
+    }
+
+    private func auditRow(_ record: InventoryAuditRecord) -> some View {
+        let hasDisc = record.discrepancies > 0
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(hasDisc ? Color.orange.opacity(0.12) : Color.green.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: hasDisc ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 17))
+                    .foregroundStyle(hasDisc ? .orange : .green)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.date.formatted(.dateTime.day().month(.wide).year()))
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if !record.auditor.isEmpty {
+                        Text(record.auditor).font(.caption).foregroundStyle(.secondary)
+                        Text("·").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("\(record.filledItems) позиций")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 3) {
+                if hasDisc {
+                    Text("\(record.discrepancies) расх.")
+                        .font(.caption.bold()).foregroundStyle(.orange)
+                } else {
+                    Text("Без расхождений")
+                        .font(.caption.bold()).foregroundStyle(.green)
+                }
+                if record.totalShortage < -0.001 {
+                    Text("−\(abs(record.totalShortage), specifier: "%.1f")")
+                        .font(.caption2).foregroundStyle(.red)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func auditSummaryChip(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value).font(.subheadline.bold())
+                Text(label).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Audit Detail
+
+struct AuditDetailView: View {
+    @EnvironmentObject var store: ChefProStore
+    let record: InventoryAuditRecord
+    @State private var showOnlyDiscrepancies = false
+
+    private var categories: [String] {
+        Array(Set(record.lines.map { $0.category })).sorted()
+    }
+
+    private func lines(for category: String) -> [AuditLineRecord] {
+        let cat = record.lines.filter { $0.category == category }
+        return showOnlyDiscrepancies ? cat.filter { abs($0.difference) > 0.001 } : cat
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+
+                // ── Hero header ──────────────────────────────
+                ZStack(alignment: .bottomLeading) {
+                    LinearGradient(
+                        colors: record.discrepancies > 0
+                            ? [Color.orange.opacity(0.8), Color.red.opacity(0.5)]
+                            : [Color.green.opacity(0.8), Color.teal.opacity(0.5)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                    .frame(height: 140)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(record.date.formatted(.dateTime.day().month(.wide).year()))
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                        if !record.auditor.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "person.fill").font(.caption)
+                                Text(record.auditor).font(.subheadline)
+                            }
+                            .foregroundStyle(.white.opacity(0.85))
+                        }
+                    }
+                    .padding(18)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 0))
+
+                // ── Stat chips ───────────────────────────────
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        detailChip(icon: "list.clipboard.fill", label: "Позиций",    value: "\(record.filledItems)",      color: .blue)
+                        detailChip(icon: "exclamationmark.triangle.fill", label: "Расхождений", value: "\(record.discrepancies)", color: record.discrepancies > 0 ? .orange : .green)
+                        detailChip(icon: "arrow.down.circle.fill", label: "Недостача", value: "\(abs(record.totalShortage), specifier: "%.1f")", color: .red)
+                        detailChip(icon: "arrow.up.circle.fill",   label: "Излишек",   value: "\(record.totalSurplus, specifier: "%.1f")",       color: .green)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+
+                // ── Filter toggle ────────────────────────────
+                if record.discrepancies > 0 {
+                    HStack {
+                        Toggle(isOn: $showOnlyDiscrepancies) {
+                            Text("Только расхождения")
+                                .font(.subheadline)
+                        }
+                        .toggleStyle(.switch)
+                        .tint(.orange)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+                }
+
+                // ── Lines by category ────────────────────────
+                ForEach(categories, id: \.self) { cat in
+                    let catLines = lines(for: cat)
+                    if !catLines.isEmpty {
+                        auditSectionHeader(cat, count: catLines.count)
+                        VStack(spacing: 0) {
+                            ForEach(catLines) { line in
+                                auditLineRow(line)
+                                if line.id != catLines.last?.id {
+                                    Divider().padding(.leading, 16)
+                                }
+                            }
+                        }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                    }
+                }
+
+                Spacer(minLength: 20)
+            }
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Инвентаризация")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.auditRecords.removeAll { $0.id == record.id }
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private func auditLineRow(_ line: AuditLineRecord) -> some View {
+        let diff = line.difference
+        let hasDisc = abs(diff) > 0.001
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.itemName)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                Text(line.category)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("\(line.systemQty, specifier: "%.2f")")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("→")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Text("\(line.actualQty, specifier: "%.2f") \(line.unit)")
+                        .font(.caption.bold())
+                        .foregroundStyle(hasDisc ? (diff < 0 ? .red : .green) : .primary)
+                }
+                if hasDisc {
+                    Text(diff > 0 ? "+\(diff, specifier: "%.2f")" : "\(diff, specifier: "%.2f")")
+                        .font(.caption2.bold())
+                        .foregroundStyle(diff > 0 ? .green : .red)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(hasDisc ? (diff < 0 ? Color.red.opacity(0.04) : Color.green.opacity(0.04)) : Color.clear)
+    }
+
+    private func auditSectionHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.subheadline.bold())
+            Spacer()
+            Text("\(count)")
+                .font(.caption2.bold())
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Color(.systemGray5))
+                .foregroundStyle(.secondary)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+    }
+
+    private func detailChip(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value).font(.subheadline.bold())
+                Text(label).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 11))
     }
 }

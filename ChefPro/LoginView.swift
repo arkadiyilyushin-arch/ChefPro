@@ -346,7 +346,7 @@ struct LoginView: View {
     private func initials(_ name: String) -> String {
         let parts = name.components(separatedBy: " ")
         if parts.count >= 2 {
-            return String((parts[0].first ?? "?")) + String((parts[1].first ?? ""))
+            return String(parts[0].first ?? "?") + String(parts[1].first ?? "?")
         }
         return String(name.prefix(2)).uppercased()
     }

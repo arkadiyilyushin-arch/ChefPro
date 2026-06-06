@@ -402,6 +402,16 @@ final class ChefProStore: ObservableObject {
         }
     }
 
+    func archiveTableOrders(tableNumber: String) {
+        let tableOrders = kitchenOrders.filter { $0.tableNumber == tableNumber }
+        kitchenOrders.removeAll { $0.tableNumber == tableNumber }
+        let toInsert = tableOrders.sorted { $0.createdAt < $1.createdAt }
+        closedKitchenOrders.insert(contentsOf: toInsert, at: 0)
+        if closedKitchenOrders.count > 100 {
+            closedKitchenOrders = Array(closedKitchenOrders.prefix(100))
+        }
+    }
+
     // MARK: Shift
     func openShift() {
         currentShift = Shift(openedAt: Date(), openedBy: profile.name)

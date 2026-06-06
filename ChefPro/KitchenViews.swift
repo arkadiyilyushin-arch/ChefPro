@@ -8,88 +8,28 @@ struct KitchenBoardView: View {
     @EnvironmentObject var store: ChefProStore
     @State private var showAddOrder = false
     @State private var showHistory  = false
-    @State private var activeTab: OrderStatus = .new
     @State private var now = Date()
 
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    private var stopListCount: Int { store.dishes.filter { $0.isStopListed }.count }
-
-    private func count(for status: OrderStatus) -> Int {
-        store.kitchenOrders.filter { $0.status == status }.count
-    }
-
-    private var visibleOrders: [KitchenOrder] {
-        store.kitchenOrders
-            .filter { $0.status == activeTab }
-            .sorted { $0.createdAt < $1.createdAt }
-    }
+    var newOrders:     [KitchenOrder] { store.kitchenOrders.filter { $0.status == .new } }
+    var cookingOrders: [KitchenOrder] { store.kitchenOrders.filter { $0.status == .cooking } }
+    var readyOrders:   [KitchenOrder] { store.kitchenOrders.filter { $0.status == .ready } }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-
-                // ── Status tabs ───────────────────────────────────
-                HStack(spacing: 8) {
-                    ForEach([OrderStatus.new, .cooking, .ready], id: \.self) { tab in
-                        boardTab(tab)
+            GeometryReader { geo in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        KanbanColumn(title: "Новые",     accent: .blue,   orders: newOrders,     now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готовятся", accent: .orange, orders: cookingOrders, now: now, columnHeight: geo.size.height - 16)
+                        KanbanColumn(title: "Готово",    accent: .green,  orders: readyOrders,   now: now, columnHeight: geo.size.height - 16)
                     }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemGroupedBackground))
-
-                Divider()
-
-                // ── Summary bar ───────────────────────────────────
-                let total = store.kitchenOrders.count
-                if total > 0 {
-                    HStack(spacing: 16) {
-                        Image(systemName: "tray.full.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        Text("\(total) позиций в работе")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        let overdueCount = store.kitchenOrders.filter { order in
-                            guard order.status == .cooking else { return false }
-                            let cookSec = TimeInterval((store.dishes.first { $0.name == order.dishName }?.cookTime ?? 0) * 60)
-                            guard cookSec > 0 else { return false }
-                            return now.timeIntervalSince(order.cookingStartedAt ?? order.createdAt) > cookSec
-                        }.count
-                        if overdueCount > 0 {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                                Text("\(overdueCount) просрочено").foregroundStyle(.red)
-                            }
-                            .font(.caption.bold())
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(Color(.systemGroupedBackground))
-                    Divider()
-                }
-
-                // ── Orders list ───────────────────────────────────
-                if visibleOrders.isEmpty {
-                    Spacer()
-                    emptyState
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(visibleOrders) { order in
-                                KitchenOrderCard(order: order, now: now)
-                                    .environmentObject(store)
-                            }
-                        }
-                        .padding(16)
-                    }
+                    .padding()
+                    .frame(minHeight: geo.size.height)
                 }
             }
-            .background(Color(.systemGroupedBackground))
+            .background(Color.chefBackground)
             .navigationTitle("Kitchen Board")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -106,25 +46,9 @@ struct KitchenBoardView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        NavigationLink {
-                            StopGoListView().environmentObject(store)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(stopListCount > 0 ? .red : .secondary)
-                                if stopListCount > 0 {
-                                    Text("\(stopListCount)")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.red)
-                                }
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        Button { showAddOrder = true } label: {
-                            Image(systemName: "plus.circle.fill").font(.title2)
-                        }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showAddOrder = true } label: {
+                        Image(systemName: "plus.circle.fill").font(.title2)
                     }
                 }
             }
@@ -137,52 +61,291 @@ struct KitchenBoardView: View {
             .onReceive(ticker) { now = $0 }
         }
     }
+}
 
-    // MARK: - Tab button
+// MARK: - Grouped table model
 
-    private func boardTab(_ status: OrderStatus) -> some View {
-        let n = count(for: status)
-        let active = activeTab == status
-        return Button {
-            withAnimation(.easeInOut(duration: 0.18)) { activeTab = status }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: status.icon)
-                    .font(.caption.bold())
-                Text(status.rawValue)
-                    .font(.subheadline.bold())
-                if n > 0 {
-                    Text("\(n)")
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(active ? Color.white.opacity(0.3) : status.color.opacity(0.2))
-                        .foregroundStyle(active ? .white : status.color)
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .frame(maxWidth: .infinity)
-            .background(active ? status.color : status.color.opacity(0.1))
-            .foregroundStyle(active ? .white : status.color)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+struct TableGroup: Identifiable {
+    let tableNumber: String
+    var orders: [KitchenOrder]
+    var id: String { tableNumber }
+
+    var courseGroups: [(course: Int, name: String, orders: [KitchenOrder])] {
+        let used = Set(orders.map(\.course)).sorted()
+        return used.map { course in
+            let name = KitchenOrder.courseNames[course] ?? "\(course) курс"
+            let filtered = orders.filter { $0.course == course }
+                                 .sorted { $0.createdAt < $1.createdAt }
+            return (course, name, filtered)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: activeTab == .new ? "tray" : activeTab == .cooking ? "flame" : "checkmark.circle")
-                .font(.system(size: 44))
-                .foregroundStyle(activeTab.color.opacity(0.4))
-            Text("Нет заказов")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text(activeTab == .new ? "Новых заказов нет" :
-                 activeTab == .cooking ? "Ничего не готовится" : "Нет готовых блюд")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    var allReady: Bool { orders.allSatisfy { $0.status == .ready } }
+    var earliestDate: Date { orders.map(\.createdAt).min() ?? Date() }
+}
+
+// MARK: - Kanban Column
+
+struct KanbanColumn: View {
+    @EnvironmentObject var store: ChefProStore
+    let title: String
+    let accent: Color
+    let orders: [KitchenOrder]
+    let now: Date
+    var columnHeight: CGFloat = 600
+
+    private var soloOrders: [KitchenOrder] {
+        orders.filter { $0.tableNumber.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    private var tableGroups: [TableGroup] {
+        let withTable = orders.filter { !$0.tableNumber.trimmingCharacters(in: .whitespaces).isEmpty }
+        let dict = Dictionary(grouping: withTable, by: \.tableNumber)
+        return dict.map { TableGroup(tableNumber: $0.key, orders: $0.value) }
+                   .sorted { $0.earliestDate < $1.earliestDate }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(title).font(.title3.bold())
+                Spacer()
+                Text("\(orders.count)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(accent.opacity(0.15))
+                    .foregroundStyle(accent)
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 2)
+            .padding(.bottom, 12)
+
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(spacing: 12) {
+                    if orders.isEmpty {
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color(.systemGray6))
+                            .frame(width: 272, height: 110)
+                            .overlay(Text("Пусто").foregroundStyle(.secondary))
+                    } else {
+                        ForEach(tableGroups) { group in
+                            TableOrderCard(group: group, now: now)
+                                .environmentObject(store)
+                        }
+                        ForEach(soloOrders) { order in
+                            KitchenOrderCard(order: order, now: now)
+                                .environmentObject(store)
+                        }
+                    }
+                }
+                .padding(.bottom, 12)
+            }
+            .frame(height: max(100, columnHeight - 52))
         }
+        .frame(width: 300, alignment: .top)
+    }
+}
+
+// MARK: - Table Order Card (grouped by courses)
+
+struct TableOrderCard: View {
+    @EnvironmentObject var store: ChefProStore
+    let group: TableGroup
+    let now: Date
+
+    private var elapsed: TimeInterval { now.timeIntervalSince(group.earliestDate) }
+
+    private var timerString: String {
+        let m = Int(elapsed) / 60; let s = Int(elapsed) % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    private var timerColor: Color {
+        if elapsed < 600  { return .green }
+        if elapsed < 1200 { return .orange }
+        return .red
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+
+            // ── Заголовок стола ──────────────────────────────────
+            HStack {
+                Label("Стол \(group.tableNumber)", systemImage: "tablecells")
+                    .font(.headline.bold())
+                Spacer()
+                Text(timerString)
+                    .font(.system(.subheadline, design: .monospaced).bold())
+                    .foregroundStyle(timerColor)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(timerColor.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider().padding(.horizontal, 12)
+
+            // ── Курсы ────────────────────────────────────────────
+            ForEach(group.courseGroups, id: \.course) { cg in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(cg.name)
+                        .font(.caption.bold())
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                    ForEach(cg.orders) { order in
+                        TableDishRow(order: order, now: now)
+                            .environmentObject(store)
+                    }
+                }
+            }
+
+            // ── Кнопка закрыть стол ─────────────────────────────
+            if group.allReady {
+                Button {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    store.archiveTableOrders(tableNumber: group.tableNumber)
+                } label: {
+                    Text("Закрыть стол")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(.systemGray5))
+                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding([.horizontal, .bottom], 14)
+                .padding(.top, 10)
+            } else {
+                Spacer().frame(height: 14)
+            }
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 3)
+        .frame(width: 300)
+    }
+}
+
+// MARK: - Single dish row inside TableOrderCard
+
+struct TableDishRow: View {
+    @EnvironmentObject var store: ChefProStore
+    let order: KitchenOrder
+    let now: Date
+
+    private var statusColor: Color {
+        switch order.status {
+        case .new:     return .blue
+        case .cooking: return .orange
+        case .ready:   return .green
+        }
+    }
+
+    private var statusIcon: String {
+        switch order.status {
+        case .new:     return "clock"
+        case .cooking: return "flame.fill"
+        case .ready:   return "checkmark.circle.fill"
+        }
+    }
+
+    private var dishCookSeconds: TimeInterval? {
+        let t = store.dishes.first(where: { $0.name == order.dishName })?.cookTime ?? 0
+        return t > 0 ? TimeInterval(t * 60) : nil
+    }
+
+    private var timerBase: Date {
+        switch order.status {
+        case .new:     return order.createdAt
+        case .cooking: return order.cookingStartedAt ?? order.createdAt
+        case .ready:   return order.readyAt ?? order.createdAt
+        }
+    }
+
+    private var elapsed: TimeInterval { now.timeIntervalSince(timerBase) }
+
+    private var timerString: String {
+        if order.status == .cooking, let target = dishCookSeconds {
+            let remaining = target - elapsed
+            if remaining > 0 {
+                let m = Int(remaining) / 60; let s = Int(remaining) % 60
+                return String(format: "-%02d:%02d", m, s)
+            } else {
+                let over = -remaining
+                let m = Int(over) / 60; let s = Int(over) % 60
+                return String(format: "+%02d:%02d", m, s)
+            }
+        }
+        let m = Int(elapsed) / 60; let s = Int(elapsed) % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+
+    private var timerColor: Color {
+        guard order.status != .ready else { return .secondary }
+        if order.status == .cooking, let target = dishCookSeconds {
+            if elapsed > target        { return .red }
+            if elapsed > target * 0.75 { return .orange }
+            return .green
+        }
+        if elapsed < 600  { return .green }
+        if elapsed < 1200 { return .orange }
+        return .red
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: statusIcon)
+                .font(.caption)
+                .foregroundStyle(statusColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(order.dishName)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                if !order.note.isEmpty {
+                    Text(order.note)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text("×\(order.portions)")
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+
+            Text(timerString)
+                .font(.system(.caption, design: .monospaced).bold())
+                .foregroundStyle(timerColor)
+
+            if let next = order.status.next {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    store.advanceOrderStatus(order)
+                } label: {
+                    Image(systemName: next.icon)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(next.color)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.title3)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(order.status == .ready ? Color.green.opacity(0.06) : Color.clear)
     }
 }
 
@@ -375,6 +538,7 @@ struct AddKitchenOrderView: View {
     @State private var dishName    = ""
     @State private var portions    = 1
     @State private var tableNumber = ""
+    @State private var course      = 1
     @State private var note        = ""
 
     private var canSave: Bool {
@@ -438,6 +602,11 @@ struct AddKitchenOrderView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 120)
                     }
+                    Picker("Курс", selection: $course) {
+                        ForEach(KitchenOrder.courseNames.keys.sorted(), id: \.self) { key in
+                            Text(KitchenOrder.courseNames[key] ?? "Курс \(key)").tag(key)
+                        }
+                    }
                     TextField("Примечание (без глютена…)", text: $note)
                 }
             }
@@ -457,7 +626,8 @@ struct AddKitchenOrderView: View {
             dishName:    dishName.trimmingCharacters(in: .whitespaces),
             portions:    portions,
             tableNumber: tableNumber.trimmingCharacters(in: .whitespaces),
-            note:        note.trimmingCharacters(in: .whitespaces)
+            note:        note.trimmingCharacters(in: .whitespaces),
+            course:      course
         )
         store.addKitchenOrder(order)
         dismiss()

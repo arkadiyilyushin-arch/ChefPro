@@ -35,7 +35,8 @@ struct CarExpense: Identifiable, Codable {
     var mileage: Int
     var liters: Double?
     var pricePerLiter: Double?
-    var tankFillType: TankFillType?  // только для топлива
+    var tankFillType: TankFillType?
+    var remainingLiters: Double?  // остаток в баке ДО заправки (для частичных заправок)
     var note: String
     var carId: UUID
 }

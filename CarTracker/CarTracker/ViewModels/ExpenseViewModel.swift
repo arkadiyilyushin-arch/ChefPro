@@ -49,20 +49,42 @@ class ExpenseViewModel: ObservableObject {
         totalFuel + totalService + totalOther
     }
 
-    /// Средний расход топлива л/100 км (только полные баки)
+    /// Средний расход топлива л/100 км
+    /// Алгоритм учитывает остаток в баке:
+    /// consumed[i→i+1] = (liters[i] + remaining[i]) − remaining[i+1]
     var averageFuelConsumption: Double? {
-        let fullFills = currentCarExpenses
-            .filter { $0.category == .fuel && $0.liters != nil && $0.tankFillType == .full }
+        let fills = currentCarExpenses
+            .filter { $0.category == .fuel && $0.liters != nil }
             .sorted { $0.mileage < $1.mileage }
 
-        guard fullFills.count >= 2 else { return nil }
+        guard fills.count >= 2 else { return nil }
 
-        // Суммируем литры начиная со второй заправки (первая — точка отсчёта)
-        let totalLiters = fullFills.dropFirst().reduce(0) { $0 + ($1.liters ?? 0) }
-        let distance = fullFills.last!.mileage - fullFills.first!.mileage
+        var totalConsumed: Double = 0
+        var totalDistance: Int = 0
 
-        guard distance > 0 else { return nil }
-        return (totalLiters / Double(distance)) * 100
+        for i in 0..<fills.count - 1 {
+            let current = fills[i]
+            let next = fills[i + 1]
+
+            let fuelAfterCurrent = (current.liters ?? 0) + (current.remainingLiters ?? 0)
+            let remainingBeforeNext = next.remainingLiters ?? 0
+            let consumed = fuelAfterCurrent - remainingBeforeNext
+
+            guard consumed > 0 else { continue }
+
+            let distance = next.mileage - current.mileage
+            guard distance > 0 else { continue }
+
+            totalConsumed += consumed
+            totalDistance += distance
+        }
+
+        guard totalDistance > 0 else { return nil }
+        return (totalConsumed / Double(totalDistance)) * 100
+    }
+
+    var fullFillCount: Int {
+        currentCarExpenses.filter { $0.category == .fuel && $0.tankFillType == .full }.count
     }
 
     var lastMileage: Int {
@@ -102,6 +124,13 @@ class ExpenseViewModel: ObservableObject {
         let ids = offsets.map { sorted[$0].id }
         expenses.removeAll { ids.contains($0.id) }
         saveData()
+    }
+
+    func updateExpense(_ updated: CarExpense) {
+        if let idx = expenses.firstIndex(where: { $0.id == updated.id }) {
+            expenses[idx] = updated
+            saveData()
+        }
     }
 
     // MARK: - Persistence

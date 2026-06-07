@@ -4,22 +4,28 @@ struct AddExpenseView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var vm: ExpenseViewModel
 
+    // Если передан expense — режим редактирования
+    var editingExpense: CarExpense? = nil
+
     @State private var category: ExpenseCategory = .fuel
     @State private var amount: String = ""
     @State private var mileage: String = ""
     @State private var liters: String = ""
     @State private var pricePerLiter: String = ""
+    @State private var remainingLiters: String = ""
+    @State private var tankFillType: TankFillType = .full
     @State private var note: String = ""
     @State private var date: Date = Date()
-    @State private var tankFillType: TankFillType = .full
-    @State private var syncAmount = true
+
+    var isEditing: Bool { editingExpense != nil }
 
     var lastMileage: Int { vm.lastMileage }
 
     var computedAmount: Double? {
-        guard category == .fuel, syncAmount,
+        guard category == .fuel,
               let l = Double(liters.replacingOccurrences(of: ",", with: ".")),
-              let p = Double(pricePerLiter.replacingOccurrences(of: ",", with: "."))
+              let p = Double(pricePerLiter.replacingOccurrences(of: ",", with: ".")),
+              l > 0, p > 0
         else { return nil }
         return l * p
     }
@@ -45,6 +51,9 @@ struct AddExpenseView: View {
                     if category == .fuel {
                         tankTypeCard
                         fuelCard
+                        if tankFillType == .partial {
+                            remainingCard
+                        }
                     } else {
                         amountCard
                     }
@@ -53,19 +62,35 @@ struct AddExpenseView: View {
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Новая запись")
+            .navigationTitle(isEditing ? "Редактировать" : "Новая запись")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { prefill() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Отмена") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Сохранить") { save() }
+                    Button(isEditing ? "Сохранить" : "Добавить") { save() }
                         .bold()
                         .disabled(!isValid)
                 }
             }
         }
+    }
+
+    // MARK: - Prefill при редактировании
+
+    private func prefill() {
+        guard let e = editingExpense else { return }
+        category = e.category
+        date = e.date
+        mileage = String(e.mileage)
+        amount = String(format: "%.2f", e.amount)
+        note = e.note
+        if let l = e.liters { liters = String(format: "%.2f", l) }
+        if let p = e.pricePerLiter { pricePerLiter = String(format: "%.2f", p) }
+        if let r = e.remainingLiters { remainingLiters = String(format: "%.2f", r) }
+        tankFillType = e.tankFillType ?? .full
     }
 
     // MARK: - Subviews
@@ -115,7 +140,7 @@ struct AddExpenseView: View {
                         .keyboardType(.numberPad)
                         .font(.title2.bold())
                     Spacer()
-                    if lastMileage > 0 {
+                    if lastMileage > 0 && !isEditing {
                         Text("Прошлый: \(lastMileage.formatted()) км")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -135,7 +160,10 @@ struct AddExpenseView: View {
                 HStack(spacing: 10) {
                     ForEach([TankFillType.full, TankFillType.partial], id: \.self) { type in
                         Button {
-                            withAnimation(.spring(response: 0.25)) { tankFillType = type }
+                            withAnimation(.spring(response: 0.25)) {
+                                tankFillType = type
+                                if type == .full { remainingLiters = "" }
+                            }
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: type == .full ? "fuelpump.fill" : "fuelpump")
@@ -151,16 +179,32 @@ struct AddExpenseView: View {
                         }
                     }
                 }
+            }
+        }
+    }
 
-                if tankFillType == .partial {
-                    HStack(spacing: 6) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                        Text("Эта заправка не будет учитываться в расчёте среднего расхода")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+    private var remainingCard: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Остаток в баке до заправки", systemImage: "drop.fill")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.secondary)
+
+                HStack {
+                    TextField("0.00", text: $remainingLiters)
+                        .keyboardType(.decimalPad)
+                        .font(.title2.bold())
+                    Text("л")
+                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                    Text("Остаток учитывается в расчёте среднего расхода")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -169,7 +213,7 @@ struct AddExpenseView: View {
     private var fuelCard: some View {
         CardView {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Топливо", systemImage: "fuelpump.fill")
+                Label("Залито топлива", systemImage: "fuelpump.fill")
                     .font(.subheadline.bold())
                     .foregroundColor(.secondary)
 
@@ -237,6 +281,25 @@ struct AddExpenseView: View {
                         }
                     }
                 }
+
+                // Итоговый расчёт с остатком
+                if tankFillType == .partial,
+                   let l = Double(liters.replacingOccurrences(of: ",", with: ".")),
+                   let r = Double(remainingLiters.replacingOccurrences(of: ",", with: ".")),
+                   l > 0 {
+                    Divider()
+                    HStack {
+                        Image(systemName: "sum")
+                            .foregroundColor(.green)
+                        Text("Итого в баке после заправки:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f л", l + r))
+                            .font(.subheadline.bold())
+                            .foregroundColor(.green)
+                    }
+                }
             }
         }
     }
@@ -282,20 +345,35 @@ struct AddExpenseView: View {
         }
         guard finalAmount > 0, let carId = vm.selectedCarId else { return }
 
-        var expense = CarExpense(
-            date: date,
-            category: category,
-            amount: finalAmount,
-            mileage: m,
-            note: note,
-            carId: carId
+        var expense = editingExpense ?? CarExpense(
+            date: date, category: category, amount: finalAmount,
+            mileage: m, note: note, carId: carId
         )
+
+        expense.date = date
+        expense.category = category
+        expense.amount = finalAmount
+        expense.mileage = m
+        expense.note = note
+        expense.liters = nil
+        expense.pricePerLiter = nil
+        expense.remainingLiters = nil
+        expense.tankFillType = nil
+
         if category == .fuel {
             expense.liters = Double(liters.replacingOccurrences(of: ",", with: "."))
             expense.pricePerLiter = Double(pricePerLiter.replacingOccurrences(of: ",", with: "."))
             expense.tankFillType = tankFillType
+            if tankFillType == .partial {
+                expense.remainingLiters = Double(remainingLiters.replacingOccurrences(of: ",", with: "."))
+            }
         }
-        vm.addExpense(expense)
+
+        if isEditing {
+            vm.updateExpense(expense)
+        } else {
+            vm.addExpense(expense)
+        }
         dismiss()
     }
 }

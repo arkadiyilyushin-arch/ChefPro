@@ -3,6 +3,7 @@ import SwiftUI
 struct ExpenseListView: View {
     @EnvironmentObject var vm: ExpenseViewModel
     @State private var showAdd = false
+    @State private var editingExpense: CarExpense? = nil
     @State private var filterCategory: ExpenseCategory? = nil
 
     var filtered: [CarExpense] {
@@ -30,6 +31,10 @@ struct ExpenseListView: View {
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showAdd) {
                 AddExpenseView()
+                    .environmentObject(vm)
+            }
+            .sheet(item: $editingExpense) { expense in
+                AddExpenseView(editingExpense: expense)
                     .environmentObject(vm)
             }
         }
@@ -61,11 +66,27 @@ struct ExpenseListView: View {
         List {
             ForEach(filtered) { expense in
                 ExpenseRowView(expense: expense)
+                    .contentShape(Rectangle())
+                    .onTapGesture { editingExpense = expense }
                     .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            withAnimation {
+                                vm.expenses.removeAll { $0.id == expense.id }
+                            }
+                        } label: {
+                            Label("Удалить", systemImage: "trash")
+                        }
+                        Button {
+                            editingExpense = expense
+                        } label: {
+                            Label("Изменить", systemImage: "pencil")
+                        }
+                        .tint(.blue)
+                    }
             }
-            .onDelete(perform: vm.deleteExpense)
         }
         .listStyle(.plain)
     }
@@ -148,19 +169,19 @@ struct ExpenseRowView: View {
                 }
                 if let liters = expense.liters {
                     HStack(spacing: 4) {
-                        Text(String(format: "%.1f л", liters))
+                        Image(systemName: expense.tankFillType == .full ? "fuelpump.fill" : "fuelpump")
+                            .font(.caption2)
+                            .foregroundColor(expense.tankFillType == .full ? .orange : .secondary)
+                        Text(String(format: "%.1f л залито", liters))
                             .font(.caption)
                             .foregroundColor(.orange)
-                        if let fillType = expense.tankFillType {
+                        if let rem = expense.remainingLiters, rem > 0 {
                             Text("·")
                                 .foregroundColor(.secondary)
                                 .font(.caption)
-                            Image(systemName: fillType == .full ? "fuelpump.fill" : "fuelpump")
-                                .font(.caption2)
-                                .foregroundColor(fillType == .full ? .orange : .secondary)
-                            Text(fillType.rawValue)
+                            Text(String(format: "+ %.1f л остаток", rem))
                                 .font(.caption)
-                                .foregroundColor(fillType == .full ? .orange : .secondary)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }

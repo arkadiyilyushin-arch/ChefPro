@@ -379,11 +379,11 @@ struct KitchenOrder: Identifiable, Codable {
 
 extension KitchenOrder {
     static let courseNames = [
-        1: "1 курс — Холодное",
-        2: "2 курс — Горячее",
-        3: "3 курс — Десерт",
-        4: "4 курс — Сырная/фрукты",
-        5: "5 курс — Дополнительный"
+        1: "1 курс",
+        2: "2 курс",
+        3: "3 курс",
+        4: "4 курс",
+        5: "5 курс"
     ]
     var courseName: String { KitchenOrder.courseNames[course] ?? "\(course) курс" }
 }

@@ -197,9 +197,11 @@ struct StatisticsView: View {
                     Text("\(formatAmount(total)) ₽")
                         .font(.title3.bold())
                         .foregroundColor(.primary)
-                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    Image(systemName: "chevron.down")
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isCollapsed)
                         .padding(.leading, 4)
                 }
                 .padding(16)

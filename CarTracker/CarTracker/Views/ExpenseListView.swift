@@ -223,10 +223,11 @@ struct ExpenseListView: View {
                 Text("\(formatAmount(total)) ₽")
                     .font(.subheadline.bold())
                     .foregroundColor(.primary)
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                Image(systemName: "chevron.down")
                     .font(.caption.bold())
                     .foregroundColor(.secondary)
-                    .animation(.spring(response: 0.3), value: isCollapsed)
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isCollapsed)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)

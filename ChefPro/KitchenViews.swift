@@ -193,6 +193,15 @@ struct KitchenOrderCard: View {
 
     private var accent: Color { order.status.color }
 
+    private var courseColor: Color {
+        switch order.course {
+        case 1: return .teal
+        case 2: return .red
+        case 3: return .purple
+        default: return .indigo
+        }
+    }
+
     private var timerBase: Date {
         switch order.status {
         case .new:     return order.createdAt
@@ -264,12 +273,13 @@ struct KitchenOrderCard: View {
                         .clipShape(Capsule())
                     Spacer(minLength: 4)
                     if !order.tableNumber.isEmpty {
-                        HStack(spacing: 3) {
-                            Image(systemName: "fork.knife").font(.caption2)
-                            Text(order.tableNumber).font(.caption.bold())
+                        HStack(spacing: 4) {
+                            Image(systemName: "rectangle.grid.2x2.fill").font(.caption2)
+                            Text("Стол \(order.tableNumber)").font(.subheadline.bold())
                         }
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Color(.systemGray5))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Color.orange)
                         .clipShape(Capsule())
                     }
                     Text(timerString)
@@ -283,10 +293,13 @@ struct KitchenOrderCard: View {
                 // ── Row 2: course + note ─────────────────────
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
-                        Image(systemName: "list.number").font(.caption2)
-                        Text(order.courseName).font(.caption)
+                        Image(systemName: "list.number").font(.caption2.bold())
+                        Text(order.courseName).font(.caption.bold())
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(courseColor)
+                    .clipShape(Capsule())
                     if !order.note.isEmpty {
                         Text("·").foregroundStyle(.secondary).font(.caption)
                         Text(order.note)

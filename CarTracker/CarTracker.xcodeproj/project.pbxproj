@@ -18,7 +18,9 @@
 		A009 /* ExpenseListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B009 /* ExpenseListView.swift */; };
 		A010 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = B010 /* Color+Hex.swift */; };
 		A011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B011 /* Assets.xcassets */; };
-		A012 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012 /* SettingsView.swift */; };
+		A012 /* SettingsView.swift in Sources */    = {isa = PBXBuildFile; fileRef = B012 /* SettingsView.swift */; };
+		A013 /* MaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B013 /* MaintenanceView.swift */; };
+		A014 /* MaintenanceItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B014 /* MaintenanceItem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,7 +34,9 @@
 		B008 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		B009 /* ExpenseListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseListView.swift; sourceTree = "<group>"; };
 		B010 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
-		B012 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B012 /* SettingsView.swift */    = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift;    sourceTree = "<group>"; };
+		B013 /* MaintenanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceView.swift; sourceTree = "<group>"; };
+		B014 /* MaintenanceItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaintenanceItem.swift; sourceTree = "<group>"; };
 		B011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		PROD /* CarTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CarTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -86,6 +90,7 @@
 				B008 /* StatisticsView.swift */,
 				B009 /* ExpenseListView.swift */,
 				B012 /* SettingsView.swift */,
+				B013 /* MaintenanceView.swift */,
 			);
 			name = Views;
 			path = Views;
@@ -96,6 +101,7 @@
 			children = (
 				B003 /* Car.swift */,
 				B004 /* CarExpense.swift */,
+				B014 /* MaintenanceItem.swift */,
 			);
 			name = Models;
 			path = Models;
@@ -200,6 +206,8 @@
 				A009 /* ExpenseListView.swift in Sources */,
 				A010 /* Color+Hex.swift in Sources */,
 				A012 /* SettingsView.swift in Sources */,
+				A013 /* MaintenanceView.swift in Sources */,
+				A014 /* MaintenanceItem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

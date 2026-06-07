@@ -6,13 +6,17 @@ struct ExpenseListView: View {
     @State private var editingExpense: CarExpense? = nil
     @State private var filterCategory: ExpenseCategory? = nil
     @State private var collapsedMonths: Set<String> = []
+    @State private var searchText = ""
 
     var grouped: [(month: String, date: Date, expenses: [CarExpense])] {
-        let source: [CarExpense]
-        if let f = filterCategory {
-            source = vm.currentCarExpenses.filter { $0.category == f }
-        } else {
-            source = vm.currentCarExpenses
+        var source = vm.currentCarExpenses
+        if let f = filterCategory { source = source.filter { $0.category == f } }
+        if !searchText.isEmpty {
+            source = source.filter {
+                $0.note.localizedCaseInsensitiveContains(searchText) ||
+                $0.category.rawValue.localizedCaseInsensitiveContains(searchText) ||
+                String($0.mileage).contains(searchText)
+            }
         }
 
         let formatter = DateFormatter()
@@ -54,6 +58,7 @@ struct ExpenseListView: View {
             }
             .navigationTitle(vm.selectedCar?.displayName ?? "Расходы")
             .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $searchText, prompt: "Поиск по заметкам, категории, пробегу")
             .sheet(isPresented: $showAdd) {
                 AddExpenseView().environmentObject(vm)
             }

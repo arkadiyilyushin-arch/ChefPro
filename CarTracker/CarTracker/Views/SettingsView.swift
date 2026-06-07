@@ -38,6 +38,30 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @State private var showDeleteAlert = false
 
+    @State private var currentIcon: String? = UIApplication.shared.alternateIconName
+
+    private func iconPreview(name: String?, label: String) -> some View {
+        let isActive = currentIcon == name
+        return Button {
+            UIApplication.shared.setAlternateIconName(name) { err in
+                if err == nil { currentIcon = name }
+            }
+        } label: {
+            VStack(spacing: 8) {
+                Image(name == nil ? "AppIconPreview" : "AppIconDarkPreview")
+                    .resizable()
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14)
+                        .stroke(isActive ? Color.accentColor : Color.clear, lineWidth: 2.5))
+                    .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+                Text(label).font(.caption.bold())
+                    .foregroundColor(isActive ? .accentColor : .secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     var body: some View {
         NavigationView {
             List {
@@ -68,6 +92,15 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+
+                // Иконка приложения
+                Section("Иконка приложения") {
+                    HStack(spacing: 16) {
+                        iconPreview(name: nil, label: "Светлая")
+                        iconPreview(name: "AppIconDark", label: "Тёмная")
+                    }
+                    .padding(.vertical, 4)
                 }
 
                 // Автомобили

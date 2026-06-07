@@ -114,11 +114,16 @@ struct ContentView: View {
                 .tabItem { Label("Автомобили", systemImage: "car.2.fill") }
                 .tag(2)
 
+            MaintenanceView()
+                .environmentObject(vm)
+                .tabItem { Label("ТО", systemImage: "wrench.and.screwdriver.fill") }
+                .tag(3)
+
             SettingsView()
                 .environmentObject(vm)
                 .environmentObject(settings)
                 .tabItem { Label("Настройки", systemImage: "gearshape.fill") }
-                .tag(3)
+                .tag(4)
         }
         .tint(.accentColor)
     }

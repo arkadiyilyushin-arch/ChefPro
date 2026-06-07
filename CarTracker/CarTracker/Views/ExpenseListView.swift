@@ -5,10 +5,31 @@ struct ExpenseListView: View {
     @State private var showAdd = false
     @State private var editingExpense: CarExpense? = nil
     @State private var filterCategory: ExpenseCategory? = nil
+    @State private var collapsedMonths: Set<String> = []
 
-    var filtered: [CarExpense] {
-        guard let f = filterCategory else { return vm.currentCarExpenses }
-        return vm.currentCarExpenses.filter { $0.category == f }
+    var grouped: [(month: String, date: Date, expenses: [CarExpense])] {
+        let source: [CarExpense]
+        if let f = filterCategory {
+            source = vm.currentCarExpenses.filter { $0.category == f }
+        } else {
+            source = vm.currentCarExpenses
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL yyyy"
+        formatter.locale = Locale(identifier: "ru_RU")
+
+        let dict = Dictionary(grouping: source) { expense -> String in
+            formatter.string(from: expense.date)
+        }
+
+        return dict.keys
+            .compactMap { key -> (String, Date, [CarExpense])? in
+                guard let items = dict[key] else { return nil }
+                let sorted = items.sorted { $0.date > $1.date }
+                return (key, sorted.first!.date, sorted)
+            }
+            .sorted { $0.1 > $1.1 }
     }
 
     var body: some View {
@@ -16,13 +37,17 @@ struct ExpenseListView: View {
             ZStack(alignment: .bottomTrailing) {
                 Color(.systemGroupedBackground).ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    filterBar
-                    if filtered.isEmpty {
-                        emptyState
-                    } else {
-                        expenseList
+                ScrollView {
+                    VStack(spacing: 16) {
+                        statsHeader
+                        filterBar
+                        if grouped.isEmpty {
+                            emptyState
+                        } else {
+                            monthSections
+                        }
                     }
+                    .padding(.bottom, 100)
                 }
 
                 addButton
@@ -30,17 +55,87 @@ struct ExpenseListView: View {
             .navigationTitle(vm.selectedCar?.displayName ?? "Расходы")
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showAdd) {
-                AddExpenseView()
-                    .environmentObject(vm)
+                AddExpenseView().environmentObject(vm)
             }
             .sheet(item: $editingExpense) { expense in
-                AddExpenseView(editingExpense: expense)
-                    .environmentObject(vm)
+                AddExpenseView(editingExpense: expense).environmentObject(vm)
             }
         }
     }
 
-    // MARK: - Filter
+    // MARK: - Шапка со статистикой
+
+    private var statsHeader: some View {
+        HStack(spacing: 12) {
+            // Пробег
+            statCard(
+                icon: "speedometer",
+                color: .blue,
+                title: "Пробег",
+                value: vm.lastMileage > 0 ? "\(vm.lastMileage.formatted())" : "—",
+                unit: vm.lastMileage > 0 ? "км" : ""
+            )
+
+            // Средний расход
+            if let avg = vm.averageFuelConsumption {
+                statCard(
+                    icon: "fuelpump.fill",
+                    color: .orange,
+                    title: "Расход",
+                    value: String(format: "%.1f", avg),
+                    unit: "л/100км"
+                )
+            } else {
+                statCard(
+                    icon: "fuelpump.fill",
+                    color: .orange,
+                    title: "Расход",
+                    value: "—",
+                    unit: "нужно 2+ заправки"
+                )
+            }
+
+            // Итого за всё время
+            statCard(
+                icon: "rublesign.circle.fill",
+                color: .green,
+                title: "Всего",
+                value: vm.totalExpenses > 0 ? formatAmount(vm.totalExpenses) : "—",
+                unit: vm.totalExpenses > 0 ? "₽" : ""
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+    }
+
+    private func statCard(icon: String, color: Color, title: String, value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption.bold())
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Text(value)
+                .font(.system(.title3, design: .rounded).bold())
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+    }
+
+    // MARK: - Фильтр
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -56,46 +151,95 @@ struct ExpenseListView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
     }
 
-    // MARK: - List
+    // MARK: - Секции по месяцам
 
-    private var expenseList: some View {
-        List {
-            ForEach(filtered) { expense in
-                ExpenseRowView(expense: expense)
-                    .contentShape(Rectangle())
-                    .onTapGesture { editingExpense = expense }
-                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            withAnimation {
-                                vm.expenses.removeAll { $0.id == expense.id }
+    private var monthSections: some View {
+        LazyVStack(spacing: 12, pinnedViews: .sectionHeaders) {
+            ForEach(grouped, id: \.month) { group in
+                let isCollapsed = collapsedMonths.contains(group.month)
+                let monthTotal = group.expenses.reduce(0) { $0 + $1.amount }
+
+                Section {
+                    if !isCollapsed {
+                        VStack(spacing: 8) {
+                            ForEach(group.expenses) { expense in
+                                ExpenseRowView(expense: expense)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { editingExpense = expense }
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            withAnimation {
+                                                vm.expenses.removeAll { $0.id == expense.id }
+                                            }
+                                        } label: {
+                                            Label("Удалить", systemImage: "trash")
+                                        }
+                                        Button { editingExpense = expense } label: {
+                                            Label("Изменить", systemImage: "pencil")
+                                        }
+                                        .tint(.blue)
+                                    }
                             }
-                        } label: {
-                            Label("Удалить", systemImage: "trash")
                         }
-                        Button {
-                            editingExpense = expense
-                        } label: {
-                            Label("Изменить", systemImage: "pencil")
-                        }
-                        .tint(.blue)
+                        .padding(.horizontal, 16)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
+                } header: {
+                    monthHeader(
+                        title: group.month.capitalized,
+                        total: monthTotal,
+                        count: group.expenses.count,
+                        isCollapsed: isCollapsed
+                    ) {
+                        withAnimation(.spring(response: 0.35)) {
+                            if isCollapsed {
+                                collapsedMonths.remove(group.month)
+                            } else {
+                                collapsedMonths.insert(group.month)
+                            }
+                        }
+                    }
+                }
             }
         }
-        .listStyle(.plain)
+    }
+
+    private func monthHeader(title: String, total: Double, count: Int,
+                             isCollapsed: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text("\(count) \(pluralRecords(count))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text("\(formatAmount(total)) ₽")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.primary)
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption.bold())
+                    .foregroundColor(.secondary)
+                    .animation(.spring(response: 0.3), value: isCollapsed)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(.systemGroupedBackground))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Empty
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Spacer()
+            Spacer(minLength: 40)
             Image(systemName: "doc.text")
                 .font(.system(size: 56))
                 .foregroundColor(.secondary.opacity(0.4))
@@ -112,9 +256,7 @@ struct ExpenseListView: View {
     // MARK: - FAB
 
     private var addButton: some View {
-        Button {
-            showAdd = true
-        } label: {
+        Button { showAdd = true } label: {
             Image(systemName: "plus")
                 .font(.title2.bold())
                 .foregroundColor(.white)
@@ -126,6 +268,21 @@ struct ExpenseListView: View {
         .padding(.trailing, 20)
         .padding(.bottom, 24)
         .disabled(vm.selectedCar == nil)
+    }
+
+    // MARK: - Helpers
+
+    private func formatAmount(_ value: Double) -> String {
+        let n = Int(value)
+        return n.formatted()
+    }
+
+    private func pluralRecords(_ n: Int) -> String {
+        let mod10 = n % 10
+        let mod100 = n % 100
+        if mod10 == 1 && mod100 != 11 { return "запись" }
+        if mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20) { return "записи" }
+        return "записей"
     }
 }
 
@@ -195,7 +352,7 @@ struct ExpenseRowView: View {
 
             Spacer()
 
-            Text("\(expense.amount.formatted(.number.precision(.fractionLength(0)))) ₽")
+            Text("\(Int(expense.amount).formatted()) ₽")
                 .font(.headline.bold())
         }
         .padding(14)

@@ -11,7 +11,8 @@ struct AddExpenseView: View {
     @State private var pricePerLiter: String = ""
     @State private var note: String = ""
     @State private var date: Date = Date()
-    @State private var syncAmount = true  // авто-расчёт суммы из литров × цена
+    @State private var tankFillType: TankFillType = .full
+    @State private var syncAmount = true
 
     var lastMileage: Int { vm.lastMileage }
 
@@ -42,6 +43,7 @@ struct AddExpenseView: View {
                     dateCard
                     mileageCard
                     if category == .fuel {
+                        tankTypeCard
                         fuelCard
                     } else {
                         amountCard
@@ -115,6 +117,47 @@ struct AddExpenseView: View {
                     Spacer()
                     if lastMileage > 0 {
                         Text("Прошлый: \(lastMileage.formatted()) км")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var tankTypeCard: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Состояние бака", systemImage: "gauge.with.dots.needle.67percent")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 10) {
+                    ForEach([TankFillType.full, TankFillType.partial], id: \.self) { type in
+                        Button {
+                            withAnimation(.spring(response: 0.25)) { tankFillType = type }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: type == .full ? "fuelpump.fill" : "fuelpump")
+                                    .font(.subheadline)
+                                Text(type.rawValue)
+                                    .font(.subheadline.bold())
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(tankFillType == type ? Color.orange : Color(.tertiarySystemGroupedBackground))
+                            .foregroundColor(tankFillType == type ? .white : .primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+
+                if tankFillType == .partial {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        Text("Эта заправка не будет учитываться в расчёте среднего расхода")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -250,6 +293,7 @@ struct AddExpenseView: View {
         if category == .fuel {
             expense.liters = Double(liters.replacingOccurrences(of: ",", with: "."))
             expense.pricePerLiter = Double(pricePerLiter.replacingOccurrences(of: ",", with: "."))
+            expense.tankFillType = tankFillType
         }
         vm.addExpense(expense)
         dismiss()

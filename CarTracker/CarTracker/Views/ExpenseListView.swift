@@ -147,9 +147,22 @@ struct ExpenseRowView: View {
                         .foregroundColor(.secondary)
                 }
                 if let liters = expense.liters {
-                    Text(String(format: "%.1f л", liters))
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                    HStack(spacing: 4) {
+                        Text(String(format: "%.1f л", liters))
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        if let fillType = expense.tankFillType {
+                            Text("·")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                            Image(systemName: fillType == .full ? "fuelpump.fill" : "fuelpump")
+                                .font(.caption2)
+                                .foregroundColor(fillType == .full ? .orange : .secondary)
+                            Text(fillType.rawValue)
+                                .font(.caption)
+                                .foregroundColor(fillType == .full ? .orange : .secondary)
+                        }
+                    }
                 }
                 if !expense.note.isEmpty {
                     Text(expense.note)

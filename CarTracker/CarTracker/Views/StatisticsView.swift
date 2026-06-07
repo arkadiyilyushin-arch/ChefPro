@@ -65,11 +65,11 @@ struct StatisticsView: View {
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
-                    Text("Рассчитано по \(vm.currentCarExpenses.filter { $0.category == .fuel && $0.liters != nil }.count) заправкам")
+                    Text("Рассчитано по \(vm.currentCarExpenses.filter { $0.category == .fuel && $0.tankFillType == .full }.count) полным бакам")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else {
-                    Text("Добавьте минимум 2 заправки\nдля расчёта расхода")
+                    Text("Добавьте минимум 2 заправки\nс полным баком для расчёта расхода")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }

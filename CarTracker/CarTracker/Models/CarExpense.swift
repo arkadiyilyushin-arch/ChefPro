@@ -22,14 +22,20 @@ enum ExpenseCategory: String, Codable, CaseIterable {
     }
 }
 
+enum TankFillType: String, Codable {
+    case full = "Полный бак"
+    case partial = "Есть остаток"
+}
+
 struct CarExpense: Identifiable, Codable {
     var id: UUID = UUID()
     var date: Date
     var category: ExpenseCategory
     var amount: Double
     var mileage: Int
-    var liters: Double?         // только для топлива
-    var pricePerLiter: Double?  // только для топлива
+    var liters: Double?
+    var pricePerLiter: Double?
+    var tankFillType: TankFillType?  // только для топлива
     var note: String
     var carId: UUID
 }

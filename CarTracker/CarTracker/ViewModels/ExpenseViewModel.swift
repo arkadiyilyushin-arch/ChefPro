@@ -49,18 +49,17 @@ class ExpenseViewModel: ObservableObject {
         totalFuel + totalService + totalOther
     }
 
-    /// Средний расход топлива л/100 км
+    /// Средний расход топлива л/100 км (только полные баки)
     var averageFuelConsumption: Double? {
-        let fuelExpenses = currentCarExpenses
-            .filter { $0.category == .fuel && $0.liters != nil }
+        let fullFills = currentCarExpenses
+            .filter { $0.category == .fuel && $0.liters != nil && $0.tankFillType == .full }
             .sorted { $0.mileage < $1.mileage }
 
-        guard fuelExpenses.count >= 2 else { return nil }
+        guard fullFills.count >= 2 else { return nil }
 
-        let totalLiters = fuelExpenses.dropFirst().reduce(0) { $0 + ($1.liters ?? 0) }
-        let minMileage = fuelExpenses.first!.mileage
-        let maxMileage = fuelExpenses.last!.mileage
-        let distance = maxMileage - minMileage
+        // Суммируем литры начиная со второй заправки (первая — точка отсчёта)
+        let totalLiters = fullFills.dropFirst().reduce(0) { $0 + ($1.liters ?? 0) }
+        let distance = fullFills.last!.mileage - fullFills.first!.mileage
 
         guard distance > 0 else { return nil }
         return (totalLiters / Double(distance)) * 100

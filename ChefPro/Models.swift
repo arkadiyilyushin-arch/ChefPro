@@ -378,8 +378,14 @@ struct KitchenOrder: Identifiable, Codable {
 }
 
 extension KitchenOrder {
-    static let courseNames = [1: "1 — Холодное", 2: "2 — Горячее", 3: "3 — Десерт"]
-    var courseName: String { KitchenOrder.courseNames[course] ?? "Курс \(course)" }
+    static let courseNames = [
+        1: "1 курс — Холодное",
+        2: "2 курс — Горячее",
+        3: "3 курс — Десерт",
+        4: "4 курс — Сырная/фрукты",
+        5: "5 курс — Дополнительный"
+    ]
+    var courseName: String { KitchenOrder.courseNames[course] ?? "\(course) курс" }
 }
 
 struct TemperatureLog: Identifiable, Codable {

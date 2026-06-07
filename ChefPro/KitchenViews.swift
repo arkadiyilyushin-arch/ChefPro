@@ -198,7 +198,9 @@ struct KitchenOrderCard: View {
         case 1: return .teal
         case 2: return .red
         case 3: return .purple
-        default: return .indigo
+        case 4: return .indigo
+        case 5: return .brown
+        default: return .gray
         }
     }
 

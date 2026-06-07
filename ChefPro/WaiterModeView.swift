@@ -715,14 +715,36 @@ struct WaiterOrderSheet: View {
 
                 // Курс
                 HStack {
-                    Text("Курс подачи").font(.subheadline).foregroundStyle(.secondary)
+                    Label("Курс подачи", systemImage: "list.number")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     Spacer()
-                    Picker("", selection: $course) {
-                        ForEach(Array(KitchenOrder.courseNames.sorted(by: { $0.key < $1.key })), id: \.key) { key, name in
-                            Text(name).tag(key)
+                    Menu {
+                        ForEach(1...5, id: \.self) { n in
+                            Button {
+                                course = n
+                            } label: {
+                                HStack {
+                                    Text(KitchenOrder.courseNames[n] ?? "\(n) курс")
+                                    if course == n {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(KitchenOrder.courseNames[course] ?? "\(course) курс")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.primary)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.chefAccent)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Color(.secondarySystemFill))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .labelsHidden()
                 }
 
                 // Примечание

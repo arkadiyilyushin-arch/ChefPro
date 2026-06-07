@@ -1162,6 +1162,7 @@ struct DishEditorForm: View {
     @State private var stepPhotos: [UUID: UIImage] = [:]
     @State private var isReorderingIngredients = false
     @State private var isReorderingSteps = false
+    @State private var editingIngredient: RecipeIngredient? = nil
 
     let units = ["г", "кг", "мл", "л", "шт"]
 
@@ -1488,6 +1489,16 @@ struct DishEditorForm: View {
                             Spacer()
                             Text("\(ingredient.quantity, specifier: "%.1f") \(ingredient.unit)")
                                 .foregroundStyle(.secondary)
+                            if !isReorderingIngredients {
+                                Button {
+                                    editingIngredient = ingredient
+                                } label: {
+                                    Image(systemName: "pencil.circle.fill")
+                                        .foregroundStyle(.chefAccent)
+                                        .font(.title3)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                     .onDelete { ingredients.remove(atOffsets: $0) }
@@ -1616,6 +1627,137 @@ struct DishEditorForm: View {
                 }
             }
             .environment(\.editMode, isReorderingSteps ? .constant(.active) : .constant(.inactive))
+        }
+        .sheet(item: $editingIngredient) { ingredient in
+            EditIngredientSheet(ingredient: ingredient) { updated in
+                if let idx = ingredients.firstIndex(where: { $0.id == updated.id }) {
+                    ingredients[idx] = updated
+                }
+            }
+            .environmentObject(store)
+        }
+    }
+}
+
+// MARK: - Edit Ingredient Sheet
+
+struct EditIngredientSheet: View {
+    @EnvironmentObject var store: ChefProStore
+    @Environment(\.dismiss) var dismiss
+
+    let ingredient: RecipeIngredient
+    var onSave: (RecipeIngredient) -> Void
+
+    @State private var productName: String
+    @State private var quantity: String
+    @State private var unit: String
+    @State private var yieldFactor: String
+    @State private var showSuggestions = false
+
+    let units = ["г", "кг", "мл", "л", "шт"]
+
+    init(ingredient: RecipeIngredient, onSave: @escaping (RecipeIngredient) -> Void) {
+        self.ingredient = ingredient
+        self.onSave = onSave
+        _productName  = State(initialValue: ingredient.productName)
+        _quantity     = State(initialValue: String(format: "%.3g", ingredient.quantity))
+        _unit         = State(initialValue: ingredient.unit)
+        _yieldFactor  = State(initialValue: String(format: "%.2f", ingredient.yieldFactor))
+    }
+
+    private var suggestions: [InventoryItem] {
+        guard !productName.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        return store.inventoryItems
+            .filter { $0.name.localizedCaseInsensitiveContains(productName) }
+            .prefix(5)
+            .map { $0 }
+    }
+
+    private var canSave: Bool {
+        !productName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        parsePositiveDouble(quantity) != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Продукт") {
+                    TextField("Название продукта", text: $productName)
+                        .onChange(of: productName) { _, _ in
+                            showSuggestions = !suggestions.isEmpty
+                        }
+                    if showSuggestions {
+                        ForEach(suggestions) { item in
+                            Button {
+                                productName = item.name
+                                unit = item.unit
+                                showSuggestions = false
+                            } label: {
+                                HStack {
+                                    Image(systemName: "checkmark.circle").foregroundStyle(.chefAccent)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.name).foregroundStyle(.primary)
+                                        Text("\(item.quantity, specifier: "%.1f") \(item.unit) · \(item.category)")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section("Количество и единица") {
+                    HStack {
+                        TextField("Количество", text: $quantity)
+                            .keyboardType(.decimalPad)
+                        Divider()
+                        Picker("", selection: $unit) {
+                            ForEach(units, id: \.self) { Text($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 80)
+                    }
+                }
+
+                Section {
+                    HStack {
+                        Text("Норматив потерь (0–1)")
+                        Spacer()
+                        TextField("0.80", text: $yieldFactor)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 70)
+                    }
+                    if let yf = Double(yieldFactor.replacingOccurrences(of: ",", with: ".")), yf < 1.0 {
+                        Text("Потери при обработке: \(Int((1 - yf) * 100))%")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                } footer: {
+                    Text("Например, 0.85 означает 15% потерь при чистке или термообработке.")
+                }
+            }
+            .navigationTitle("Редактировать ингредиент")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Отмена") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Сохранить") {
+                        guard let qty = parsePositiveDouble(quantity) else { return }
+                        let yf = Double(yieldFactor.replacingOccurrences(of: ",", with: ".")) ?? 1.0
+                        var updated = ingredient
+                        updated.productName = productName
+                        updated.quantity = qty
+                        updated.unit = unit
+                        updated.yieldFactor = max(0.01, min(1.0, yf))
+                        onSave(updated)
+                        dismiss()
+                    }
+                    .disabled(!canSave)
+                    .fontWeight(.semibold)
+                }
+            }
         }
     }
 }
